@@ -1,0 +1,11 @@
+# This is camGrasshopper's sample config.
+# Copy it to your 'bin' directory so the system can find it.
+
+# replace this id with your used id
+[capture]
+
+# master camera index
+masterCam = 0
+
+# shutter speed in ms (lower shutter speed will result in higher noise)
+shutterSpeed = 20
