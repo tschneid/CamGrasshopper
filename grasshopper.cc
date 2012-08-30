@@ -1,6 +1,7 @@
 
 #include "grasshopper.h"
 #include "FlyCapture2.h"
+#include <opencv2/imgproc/imgproc.hpp>
 
 using namespace FlyCapture2;
 
@@ -420,6 +421,7 @@ cv::Mat Grasshopper::getImage(const int i)
     // Set the pointer of the cv::Mat data to the image data
     // (Is this stable? Definitely not thread-safe...)
     img.data = images[i].GetData();
+    if (bpp/8 == 3) cv::cvtColor(img,img,CV_BGR2RGB);
     
     // Alternatively copy the data to the cv::Mat
     //memcpy(img.data, images[i].GetData(), images[i].GetDataSize()); // the size is 1024*768*3 Byte 

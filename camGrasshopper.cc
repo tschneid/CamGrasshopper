@@ -20,7 +20,7 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, shutterSpeed(config.getValue<int>(id + ".shutterSpeed", -1))
 {
 	// initialize cameras with defined video mode and frame rate
-	g.initCameras(FlyCapture2::VIDEOMODE_1600x1200Y8, FlyCapture2::FRAMERATE_15);
+	g.initCameras(FlyCapture2::VIDEOMODE_1024x768RGB, FlyCapture2::FRAMERATE_7_5);
 
 	g.printVideoModes(0);
 	if (shutterSpeed > 0)
