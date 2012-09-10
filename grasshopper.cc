@@ -1,4 +1,3 @@
-
 #include "grasshopper.h"
 #include "FlyCapture2.h"
 #include <opencv2/imgproc/imgproc.hpp>
@@ -8,7 +7,7 @@ using namespace FlyCapture2;
 
 
 
-Grasshopper::Grasshopper() 
+Grasshopper::Grasshopper(int triggerSwitch)
 : // cameras
   numCameras(0),
   // source pin for hardware trigger
@@ -27,7 +26,8 @@ Grasshopper::Grasshopper()
   embedROIPosition(false),
   // timestamp
   old_ts(-1),
-  fps(-1)
+  fps(-1),
+  triggerSwitch(triggerSwitch)
 {
     
 }
@@ -132,173 +132,168 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
     testPropertiesForManualMode();
 
 
-#if FIREWIRE_TRIGGER
-
-    error = Camera::StartSyncCapture( numCameras, (const Camera**)ppCameras );
-    if (error != PGRERROR_OK)
+    if (triggerSwitch==2)
     {
-        printError( error );
-        printf( 
-            // Cameras could not be synchronized over the Firewire bus
-            "Error starting cameras. \n"
-            "Are the cameras on the same bus? (Not dual-bus!). \n");
-        return false;
-    }
-
-
-#elif SOFTWARE_TRIGGER || HARDWARE_TRIGGER
-
-    const unsigned int millisecondsToSleep = 100;
-    unsigned int regVal = 0;
-
-    #pragma omp parallel for
-    for ( unsigned int i = 0; i < numCameras; ++i )
-    {
-        // Power on the cameras
-        const unsigned int k_cameraPower = 0x610;
-        const unsigned int k_powerVal = 0x80000000;
-        error  = ppCameras[i]->WriteRegister( k_cameraPower, k_powerVal );
+        error = Camera::StartSyncCapture( numCameras, (const Camera**)ppCameras );
         if (error != PGRERROR_OK)
         {
             printError( error );
-            errorState = true;
+            printf( 
+                    // Cameras could not be synchronized over the Firewire bus
+                    "Error starting cameras. \n"
+                    "Are the cameras on the same bus? (Not dual-bus!). \n");
+            return false;
         }
+    }
+    else
+    if (triggerSwitch==1 || triggerSwitch==3)
+    {
+        const unsigned int millisecondsToSleep = 100;
+        unsigned int regVal = 0;
 
-
-        // Wait for cameras to complete power-up
-        do 
+#pragma omp parallel for
+        for ( unsigned int i = 0; i < numCameras; ++i )
         {
-            usleep(millisecondsToSleep * 1000);
-            error = ppCameras[i]->ReadRegister(k_cameraPower, &regVal);
+            // Power on the cameras
+            const unsigned int k_cameraPower = 0x610;
+            const unsigned int k_powerVal = 0x80000000;
+            error  = ppCameras[i]->WriteRegister( k_cameraPower, k_powerVal );
             if (error != PGRERROR_OK)
             {
                 printError( error );
                 errorState = true;
             }
-        } while ((regVal & k_powerVal) == 0);
 
 
-    #if HARDWARE_TRIGGER
-        // Check for external trigger support
-        TriggerModeInfo triggerModeInfo;
-        error = ppCameras[i]->GetTriggerModeInfo( &triggerModeInfo );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
+            // Wait for cameras to complete power-up
+            do 
+            {
+                usleep(millisecondsToSleep * 1000);
+                error = ppCameras[i]->ReadRegister(k_cameraPower, &regVal);
+                if (error != PGRERROR_OK)
+                {
+                    printError( error );
+                    errorState = true;
+                }
+            } while ((regVal & k_powerVal) == 0);
+
+
+            if (triggerSwitch==3)
+            {
+                // Check for external trigger support
+                TriggerModeInfo triggerModeInfo;
+                error = ppCameras[i]->GetTriggerModeInfo( &triggerModeInfo );
+                if (error != PGRERROR_OK)
+                {
+                    printError( error );
+                    errorState = true;
+                }
+
+                if ( triggerModeInfo.present != true )
+                {
+                    printf( "Camera does not support external trigger!\n" );
+                    errorState = true;
+                }
+            }
+
+            // Get current trigger settings
+            TriggerMode triggerMode;
+            error = ppCameras[i]->GetTriggerMode( &triggerMode );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                errorState = true;
+            }
+
+            // Set camera to trigger mode 0
+            // Trigger_Mode_0 (“Standard External Trigger Mode”)
+            // Trigger_Mode_0 is best described as the standard external trigger mode. When the camera is put
+            // into Trigger_Mode_0, the camera starts integration of the incoming light from external trigger input
+            // falling/rising edge. The SHUTTER register describes integration time. No parameter is required. The
+            // camera can be triggered in this mode using the GPIO pins as external trigger or the SOFTWARE_
+            // TRIGGER (62Ch) register.
+
+            // It is not possible to trigger the camera the full frame rate using Mode_0;
+            // however, this is possible using Trigger_Mode_14.
+
+
+            triggerMode.onOff = true;
+            triggerMode.mode = TRIGGER_MODE_NUMBER;
+            triggerMode.parameter = 0;
+            // A source of 7 means software trigger
+            if (triggerSwitch==1) triggerMode.source = 7;
+            // Triggering the camera externally using specified source pin.
+            if (triggerSwitch==3) triggerMode.source = GPIO_TRIGGER_SOURCE_PIN;
+
+            error = ppCameras[i]->SetTriggerMode( &triggerMode );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                errorState = true;
+            }
+
+            // Poll to ensure camera is ready
+            bool retVal = PollForTriggerReady( ppCameras[i] );
+            if( !retVal )
+            {
+                printf("\nError polling for trigger ready!\n");
+                errorState = true;
+            }
+
+            // Get the camera configuration
+            FC2Config config;
+            error = ppCameras[i]->GetConfiguration( &config );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                errorState = true;
+            } 
+            // Set the grab timeout to 5 seconds
+            // grabTimeout = Time in milliseconds that RetrieveBuffer()
+            // and WaitForBufferEvent() will wait for an image before
+            // timing out and returning. 
+            config.grabTimeout = 5000;
+            // config.grabMode = BUFFER_FRAMES; // tried for a higher frame rate... not working
+            // Set the camera configuration
+            error = ppCameras[i]->SetConfiguration( &config );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                errorState = true;
+            }
+
+            // Cameras are ready, start capturing images
+            error = ppCameras[i]->StartCapture();
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                errorState = true;
+            }
+
+            if (triggerSwitch==1 && !CheckSoftwareTriggerPresence( ppCameras[i] ))
+            {
+                printf( "SOFT_ASYNC_TRIGGER not implemented on this camera! Stopping application\n");
+                errorState = true;
+            }
+            if (triggerSwitch==3) printf( "Trigger the camera by sending a trigger pulse to GPIO%d.\n", GPIO_TRIGGER_SOURCE_PIN );
         }
 
-        if ( triggerModeInfo.present != true )
+        if (errorState)
+            return false;
+
+        for (unsigned int i = 0; i < numCameras; ++i)
         {
-            printf( "Camera does not support external trigger!\n" );
-            errorState = true;
+
+
         }
-    #endif
-
-        // Get current trigger settings
-        TriggerMode triggerMode;
-        error = ppCameras[i]->GetTriggerMode( &triggerMode );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
-        }
-
-        // Set camera to trigger mode 0
-        // Trigger_Mode_0 (“Standard External Trigger Mode”)
-        // Trigger_Mode_0 is best described as the standard external trigger mode. When the camera is put
-        // into Trigger_Mode_0, the camera starts integration of the incoming light from external trigger input
-        // falling/rising edge. The SHUTTER register describes integration time. No parameter is required. The
-        // camera can be triggered in this mode using the GPIO pins as external trigger or the SOFTWARE_
-        // TRIGGER (62Ch) register.
-        
-        // It is not possible to trigger the camera the full frame rate using Mode_0;
-        // however, this is possible using Trigger_Mode_14.
-
-
-        triggerMode.onOff = true;
-        triggerMode.mode = TRIGGER_MODE_NUMBER;
-        triggerMode.parameter = 0;
-    #ifdef SOFTWARE_TRIGGER
-        // A source of 7 means software trigger
-        triggerMode.source = 7;
-    #elif HARDWARE_TRIGGER
-        // Triggering the camera externally using specified source pin.
-        triggerMode.source = GPIO_TRIGGER_SOURCE_PIN;
-    #endif
-
-        error = ppCameras[i]->SetTriggerMode( &triggerMode );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
-        }
-
-        // Poll to ensure camera is ready
-        bool retVal = PollForTriggerReady( ppCameras[i] );
-        if( !retVal )
-        {
-            printf("\nError polling for trigger ready!\n");
-            errorState = true;
-        }
-
-        // Get the camera configuration
-        FC2Config config;
-        error = ppCameras[i]->GetConfiguration( &config );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
-        } 
-        // Set the grab timeout to 5 seconds
-        // grabTimeout = Time in milliseconds that RetrieveBuffer()
-        // and WaitForBufferEvent() will wait for an image before
-        // timing out and returning. 
-        config.grabTimeout = 5000;
-        // config.grabMode = BUFFER_FRAMES; // tried for a higher frame rate... not working
-        // Set the camera configuration
-        error = ppCameras[i]->SetConfiguration( &config );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
-        }
-
-        // Cameras are ready, start capturing images
-        error = ppCameras[i]->StartCapture();
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            errorState = true;
-        }
-
-    #ifdef SOFTWARE_TRIGGER
-        if (!CheckSoftwareTriggerPresence( ppCameras[i] ))
-        {
-            printf( "SOFT_ASYNC_TRIGGER not implemented on this camera! Stopping application\n");
-            errorState = true;
-        }
-    #elif HARDWARE_TRIGGER
-        printf( "Trigger the camera by sending a trigger pulse to GPIO%d.\n", GPIO_TRIGGER_SOURCE_PIN );
-    #endif
     }
-
-    if (errorState)
-        return false;
-
-    for (unsigned int i = 0; i < numCameras; ++i)
+    else
     {
-
-
+        for ( unsigned int i = 0; i < numCameras; ++i )
+        {
+            ppCameras[i]->StartCapture();
+        }
     }
-
-//#endif /* Software or Hardware Trigger */
-#else /* no trigger specified */
-    for ( unsigned int i = 0; i < numCameras; ++i )
-    {
-        ppCameras[i]->StartCapture();
-    }
-#endif
 
     return true;
 }
@@ -307,27 +302,28 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
 
 bool Grasshopper::stopCameras()
 {
-#if SOFTWARE_TRIGGER || HARDWARE_TRIGGER
-    // Turn trigger mode off.
-    for (unsigned int i = 0; i < numCameras; ++i)
+    if (triggerSwitch==1 || triggerSwitch==3)
     {
-        TriggerMode triggerMode;
-        error = ppCameras[i]->GetTriggerMode( &triggerMode );
-        if (error != PGRERROR_OK)
+        // Turn trigger mode off.
+        for (unsigned int i = 0; i < numCameras; ++i)
         {
-            printError( error );
-            //exit(-1);
-        }
-        triggerMode.onOff = false;
+            TriggerMode triggerMode;
+            error = ppCameras[i]->GetTriggerMode( &triggerMode );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                //exit(-1);
+            }
+            triggerMode.onOff = false;
 
-        error = ppCameras[i]->SetTriggerMode( &triggerMode );
-        if (error != PGRERROR_OK)
-        {
-            printError( error );
-            //exit(-1);
+            error = ppCameras[i]->SetTriggerMode( &triggerMode );
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+                //exit(-1);
+            }
         }
     }
-#endif
     for ( unsigned int i = 0; i < numCameras; i++ )
     {
         ppCameras[i]->StopCapture();
@@ -344,25 +340,26 @@ bool Grasshopper::stopCameras()
 
 bool Grasshopper::getNextFrame()
 {
-#if SOFTWARE_TRIGGER
-    // Fire software trigger
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("FireSoftwareTrigger()");
-#endif
-    bool retVal = FireSoftwareTrigger(ppCameras);
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("FireSoftwareTrigger()");
-#endif
-   /* for (unsigned int i = 0; i < numCameras; ++i)
+    if (triggerSwitch==1)
     {
-    	retVal &= FireSoftwareTrigger( ppCameras[i] );
-    }*/
-    if ( !retVal )
-    {
-        printf("Error firing software trigger!\n");
-        return false;
+        // Fire software trigger
+#ifdef _WITH_TIMER
+        OKAPI_TIMER_START("FireSoftwareTrigger()");
+#endif
+        bool retVal = FireSoftwareTrigger(ppCameras);
+#ifdef _WITH_TIMER
+        OKAPI_TIMER_STOP("FireSoftwareTrigger()");
+#endif
+        /* for (unsigned int i = 0; i < numCameras; ++i)
+           {
+           retVal &= FireSoftwareTrigger( ppCameras[i] );
+           }*/
+        if ( !retVal )
+        {
+            printf("Error firing software trigger!\n");
+            return false;
+        }
     }
-#endif
 #ifdef _WITH_TIMER
     OKAPI_TIMER_START("RetrieveBuffer() of all cameras");
 #endif
@@ -371,7 +368,7 @@ bool Grasshopper::getNextFrame()
 #ifdef _WITH_TIMER
     OKAPI_TIMER_START("RetrieveBuffer() of one cameras");
 #endif
-    	// Write the frame in images
+        // Write the frame in images
         error = ppCameras[i]->RetrieveBuffer( &images[i] );
         if (error != PGRERROR_OK)
         {
@@ -393,7 +390,7 @@ bool Grasshopper::getNextFrame()
 
 Image Grasshopper::getFlyCapImage(const int i)
 {
-	return images[i];
+    return images[i];
 }
 
 
@@ -575,8 +572,8 @@ bool Grasshopper::testPropertiesForManualMode()
             return false;
         }
 
-		// do not output rest
-		continue;
+        // do not output rest
+        continue;
 
         // Only care about a property which is present and
         // can be set to auto mode.
@@ -1136,15 +1133,15 @@ bool Grasshopper::FireSoftwareTrigger( Camera** ppCam )
 
     for (unsigned int i = 0; i < numCameras; ++i)
     {
-    	error = ppCam[i]->WriteRegister( k_softwareTrigger, k_fireVal );
-    	if (error != PGRERROR_OK)
-	    {
-	        printError( error );
-	        return false;
-	    }
+        error = ppCam[i]->WriteRegister( k_softwareTrigger, k_fireVal );
+        if (error != PGRERROR_OK)
+        {
+            printError( error );
+            return false;
+        }
     }
     
-	return true;
+    return true;
 }
 
 
@@ -1275,7 +1272,7 @@ int main(int argc, char** argv)
         widWin->setButton("Show Gain", false);
 
         // Initialize cameras
-    	Grasshopper g;
+        Grasshopper g;
         g.resetBus(); // does not change anything...
 
 
@@ -1291,12 +1288,12 @@ int main(int argc, char** argv)
         g.setShutter(20);
 
         // get number of cameras
-    	int numCameras = g.getNumCameras();
+        int numCameras = g.getNumCameras();
 
         int counter = 0;
         // main loop
-    	for (;;)
-    	{
+        for (;;)
+        {
             counter++;
             if (counter == 50)
             {
@@ -1314,7 +1311,7 @@ int main(int argc, char** argv)
             // set cam 0 to master and distribute its properties (shutter, gain, etc.)
             g.distributeCamProperties(0);
             // trigger and catch frames
-    		g.getNextFrame();
+            g.getNextFrame();
 
             // g.saveImages(i); // this would save them to disk
 
@@ -1323,9 +1320,9 @@ int main(int argc, char** argv)
             std::string fps = g.getProcessedFPSString();
 
 
-    		for (int cam = 0; cam < numCameras; ++cam)
-    		{
-    			//Image img = g.getFlyCapImage(cam);
+            for (int cam = 0; cam < numCameras; ++cam)
+            {
+                //Image img = g.getFlyCapImage(cam);
                 cv::Mat img = g.getImage(cam);
 
                 // write status in left upper image corner
@@ -1344,7 +1341,7 @@ int main(int argc, char** argv)
                 // set images in gui
                 imgWin->setImage(okapi::strprintf("camera %i", cam), img, 0.45f);
 
-    		}
+            }
 
             //if (cycleDiff < 0)
             //    cycleDiff += 8000;
@@ -1353,7 +1350,7 @@ int main(int argc, char** argv)
 
             // end application if okapi window is closed
             if (!imgWin->getWindowState() || !widWin->getWindowState()) break;
-    	}
+        }
 
         // restore default values before stopping
         g.restoreDefaultProperties();

@@ -10,7 +10,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 // Specify the Trigger Mode
-//#define SOFTWARE_TRIGGER 0  // A register on the cameras will be written to initiate the capture of a frame.
+//#define SOFTWARE_TRIGGER 1  // A register on the cameras will be written to initiate the capture of a frame.
 //#define FIREWIRE_TRIGGER 0  // The cameras synchronize over the firewire bus. Therefore they have to be on the same bus (no dual-bus).
 //#define HARDWARE_TRIGGER 0  // The cameras receive an external signal to trigger frame capturing at a specified GPIO port.
 // You may also undefine all trigger modes to reject triggering the cameras (and get asynchronous images, but a higher frame rate).
@@ -18,9 +18,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 // Throw error if more than one trigger mode is specified
-#if (SOFTWARE_TRIGGER && HARDWARE_TRIGGER) || (SOFTWARE_TRIGGER && FIREWIRE_TRIGGER) || (HARDWARE_TRIGGER && FIREWIRE_TRIGGER)
-    #error Only one trigger mode can be specified!
-#endif
+//#if (SOFTWARE_TRIGGER && HARDWARE_TRIGGER) || (SOFTWARE_TRIGGER && FIREWIRE_TRIGGER) || (HARDWARE_TRIGGER && FIREWIRE_TRIGGER)
+//    #error Only one trigger mode can be specified!
+//#endif
 
 // Makro for Flycapture Videomodes
 #define VIDEOMODE(width,height,encoding) VIDEOMODE_##width##x##height##encoding
@@ -90,7 +90,7 @@ class Grasshopper
 public:
 	/** Constructor
 	*/
-	Grasshopper();
+	Grasshopper(int triggerSwitch = 0);
 
 #ifdef _STANDALONE
 	///////////////////////////////////////////////////////////////////////////
@@ -182,6 +182,13 @@ private:
 		 embedFrameCounter, embedStrobePattern,
     	 embedGPIOPinState, embedROIPosition;
     double old_ts, fps;
+
+	// trigger Mode:
+	// 0 no trigger
+	// 1 software trigger
+	// 2 firewire trigger
+	// 3 hardware trigger
+	int triggerSwitch;
 
 };
 
