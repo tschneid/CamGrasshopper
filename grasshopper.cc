@@ -42,7 +42,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
         printError( error );
         return false;
     }
-    printf( "Number of cameras detected: %u\n\n", numCameras );
+    //printf( "Number of cameras detected: %u\n\n", numCameras );
     if ( numCameras < 1 )
     {
         printf( "Insufficient number of cameras!\n" );
@@ -87,8 +87,8 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             printError( error );
             errorState = true;
         }
-        std::cout << i <<":\n";
-        printCamInfo(&camInfo); 
+        //std::cout << i <<":\n";
+        //printCamInfo(&camInfo); 
 
         // Set all cameras to a specific mode and frame rate so they
         // can be synchronized.
@@ -563,7 +563,7 @@ bool Grasshopper::testPropertiesForManualMode()
     // considered later on (i.e. if they are present and if they
     // can be set to manual mode)
     // @TODO This assumes, that the properties are the same for each camera!
-    std::cout << "*** CAMERA PROPERTIES ***\n";
+    //std::cout << "*** CAMERA PROPERTIES ***\n";
     for (std::map<PropertyType,bool>::iterator it = manualProp.begin(); it != manualProp.end(); ++it)
     {
         PropertyInfo propInfo;
@@ -574,6 +574,10 @@ bool Grasshopper::testPropertiesForManualMode()
             printError( error );
             return false;
         }
+
+		// do not output rest
+		continue;
+
         // Only care about a property which is present and
         // can be set to auto mode.
         std::cout << toString((*it).first);

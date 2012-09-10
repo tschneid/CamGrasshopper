@@ -10,9 +10,9 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 // Specify the Trigger Mode
-#define SOFTWARE_TRIGGER 1  // A register on the cameras will be written to initiate the capture of a frame.
-#define FIREWIRE_TRIGGER 0  // The cameras synchronize over the firewire bus. Therefore they have to be on the same bus (no dual-bus).
-#define HARDWARE_TRIGGER 0  // The cameras receive an external signal to trigger frame capturing at a specified GPIO port.
+//#define SOFTWARE_TRIGGER 0  // A register on the cameras will be written to initiate the capture of a frame.
+//#define FIREWIRE_TRIGGER 0  // The cameras synchronize over the firewire bus. Therefore they have to be on the same bus (no dual-bus).
+//#define HARDWARE_TRIGGER 0  // The cameras receive an external signal to trigger frame capturing at a specified GPIO port.
 // You may also undefine all trigger modes to reject triggering the cameras (and get asynchronous images, but a higher frame rate).
 
 ///////////////////////////////////////////////////////////////////////////////
