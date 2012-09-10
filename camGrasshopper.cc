@@ -14,13 +14,14 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, bvs(bvs)
 	, outputs()
 	, config("capture", 0, nullptr, "camGrasshopperConfig.txt")
-	, g()
+	, g(1)
 	, numCameras(0)
 	, masterCam(config.getValue<int>(id + ".masterCam", -1))
 	, shutterSpeed(config.getValue<int>(id + ".shutterSpeed", -1))
 {
 	// initialize cameras with defined video mode and frame rate
 	g.initCameras(FlyCapture2::VIDEOMODE_1024x768RGB, FlyCapture2::FRAMERATE_7_5);
+	//g.initCameras(FlyCapture2::VIDEOMODE_1600x1200RGB, FlyCapture2::FRAMERATE_7_5);
 	//g.initCameras(FlyCapture2::VIDEOMODE_1024x768Y8, FlyCapture2::FRAMERATE_15);
 
 	//g.printVideoModes(0);
