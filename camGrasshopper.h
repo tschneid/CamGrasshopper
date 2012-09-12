@@ -1,6 +1,10 @@
 #ifndef CAMGRASSHOPPER_H
 #define CAMGRASSHOPPER_H
 
+#include<condition_variable>
+#include<mutex>
+#include<thread>
+
 #include "bvs/module.h"
 #include "grasshopper.h"
 
@@ -58,6 +62,8 @@ class camGrasshopper : public BVS::Module
 		 * @see Connector
 		 */
 
+		void triggerCameras();
+
 		std::vector<BVS::Connector<cv::Mat>* > outputs;
 
 		camGrasshopper(const camGrasshopper&) = delete; /**< -Weffc++ */
@@ -70,6 +76,16 @@ class camGrasshopper : public BVS::Module
 
 		int masterCam; /**< Index for master cam. Slave cams will get image properties from master. */
 		int shutterSpeed; /**< Define shutter speed for higher frame rate. */
+
+
+		bool triggerRunning;
+		bool triggerExit;
+		std::mutex masterMutex;
+		std::unique_lock<std::mutex> masterLock;
+		std::mutex triggerMutex;
+		std::unique_lock<std::mutex> triggerLock;
+		std::condition_variable triggerCond;
+		std::thread trigger;
 };
 
 #endif //CAMGRASSHOPPER_H

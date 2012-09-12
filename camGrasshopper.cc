@@ -1,5 +1,7 @@
 #include "camGrasshopper.h"
 #include "grasshopper.h"
+#include <thread>
+
 
 
 // This is your module's constructor.
@@ -14,15 +16,24 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, bvs(bvs)
 	, outputs()
 	, config("capture", 0, nullptr, "camGrasshopperConfig.txt")
-	, g(1)
+	, g(2)
 	, numCameras(0)
 	, masterCam(config.getValue<int>(id + ".masterCam", -1))
 	, shutterSpeed(config.getValue<int>(id + ".shutterSpeed", -1))
+	, triggerRunning(false)
+	, triggerExit(false)
+	, masterMutex()
+	, masterLock(masterMutex)
+	, triggerMutex()
+	, triggerLock(triggerMutex)
+	, triggerCond()
+	, trigger()
 {
 	// initialize cameras with defined video mode and frame rate
-	g.initCameras(FlyCapture2::VIDEOMODE_1024x768RGB, FlyCapture2::FRAMERATE_7_5);
+	//g.initCameras(FlyCapture2::VIDEOMODE_1024x768RGB, FlyCapture2::FRAMERATE_7_5);
 	//g.initCameras(FlyCapture2::VIDEOMODE_1600x1200RGB, FlyCapture2::FRAMERATE_7_5);
-	//g.initCameras(FlyCapture2::VIDEOMODE_1024x768Y8, FlyCapture2::FRAMERATE_15);
+	//g.initCameras(FlyCapture2::VIDEOMODE_1600x1200Y8, FlyCapture2::FRAMERATE_15);
+	g.initCameras(FlyCapture2::VIDEOMODE_1024x768Y8, FlyCapture2::FRAMERATE_15);
 
 	//g.printVideoModes(0);
 	if (shutterSpeed > 0)
@@ -35,6 +46,10 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	{
 		outputs.push_back( new BVS::Connector<cv::Mat>(std::string("out")+std::to_string(i+1), BVS::ConnectorType::OUTPUT) );
 	}
+	g.getNextFrame();
+
+	triggerRunning = true;
+	trigger = std::thread(&camGrasshopper::triggerCameras, this);
 }
 
 
@@ -43,6 +58,11 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 // See the constructor for more info.
 camGrasshopper::~camGrasshopper()
 {
+	triggerExit = true;
+	triggerRunning = true;
+	triggerCond.notify_one();
+	if (trigger.joinable()) trigger.join();
+
 	g.restoreDefaultProperties();
     g.stopCameras();
 }
@@ -52,57 +72,37 @@ camGrasshopper::~camGrasshopper()
 // Put all your work here.
 BVS::Status camGrasshopper::execute()
 {
-	// to log messages to console or file, use the LOG(...) macro
-	//LOG(3, "Execution of " << id << "!");
-
-	LOG(3, "Execution of " << id << "!");
-
-	// Various settings and information
-	// in some config:
-	// [thisModuleId]
-	// foo = 42
-	//int foo = bvs.getValue<int>(id + ".myInteger, 23);
-	//unsigned long long round = bvs.round;
-	//int lastRoundModuleDuration = bvs.moduleDurations.find(id)->second.count();
-	//int lastRoundDuration = bvs.lastRoundDuration.count();
-
-	// Simple Connector Example
-	//int incoming;
-	//std::string message;
-	//if (input.receive(incoming))
-	//{
-	//	message = "received" + std::to_string(incoming);
-	//}
-	//else
-	//{
-	//	message = "no input received!";
-	//}
-	//output.send(message);
-
 	if (masterCam >= 0)
 	{
 		g.distributeCamProperties(masterCam);
 	}
-	
-	g.getNextFrame();
-	
-	for (int i = 0; i < numCameras; ++i)
+
+	triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
+
+	for (unsigned int i = 0; i < numCameras; ++i)
 	{
 		cv::Mat img = g.getImage(i);
 		outputs[i]->send(img);
 	}
 
-	// Advanced Connector Example (do not forget to unlock the connection or
-	// you will cause deadlocks)
-	//std::string s2 = "This";
-	//output.lockConnection();
-	//*output = s2;
-	//*output = *output + " is an";
-	//s2 = " example!";
-	//*output += s2;
-	//output.unlockConnection();
+	triggerRunning = true;
+	triggerCond.notify_one();
 
 	return BVS::Status::OK;
+}
+
+
+
+void camGrasshopper::triggerCameras()
+{
+	while (!triggerExit)
+	{
+		triggerCond.wait(triggerLock, [&](){ return triggerRunning; });
+		g.getNextFrame();
+		triggerRunning = false;
+		triggerCond.notify_one();
+	}
+	triggerCond.notify_one();
 }
 
 
