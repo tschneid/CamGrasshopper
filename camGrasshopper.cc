@@ -72,11 +72,6 @@ camGrasshopper::~camGrasshopper()
 // Put all your work here.
 BVS::Status camGrasshopper::execute()
 {
-	if (masterCam >= 0)
-	{
-		g.distributeCamProperties(masterCam);
-	}
-
 	triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
 
 	for (unsigned int i = 0; i < numCameras; ++i)
@@ -98,6 +93,7 @@ void camGrasshopper::triggerCameras()
 	while (!triggerExit)
 	{
 		triggerCond.wait(triggerLock, [&](){ return triggerRunning; });
+		if (masterCam >= 0) g.distributeCamProperties(masterCam);
 		g.getNextFrame();
 		triggerRunning = false;
 		triggerCond.notify_one();
