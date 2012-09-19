@@ -74,9 +74,10 @@ BVS::Status camGrasshopper::execute()
 {
 	triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
 
+	cv::Mat img;
 	for (unsigned int i = 0; i < numCameras; ++i)
 	{
-		cv::Mat img = g.getImage(i);
+		img = g.getImage(i);
 		outputs[i]->send(img);
 	}
 
