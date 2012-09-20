@@ -881,6 +881,20 @@ std::string Grasshopper::getProperty(const PropertyType& propType, const int i)
 }
 
 
+
+int Grasshopper::getCameraSerialNumber(int index)
+{
+	CameraInfo camInfo;
+	error = ppCameras[index]->GetCameraInfo(&camInfo);
+	if (error != PGRERROR_OK)
+	{
+		printError( error );
+	}
+	return camInfo.serialNumber;
+}
+
+
+
 #ifdef _STANDALONE
 void Grasshopper::resetBus()
 {

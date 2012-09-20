@@ -141,6 +141,7 @@ public:
 	unsigned int getCycleCount(const int i = 0) const;
 	bool saveImages(const int imgNum = 0); // very primitive
 	Image getFlyCapImage(const int i = 0);
+	int getCameraSerialNumber(int index);
 
 	///////////////////////////////////////////////////////////////////////////
 
