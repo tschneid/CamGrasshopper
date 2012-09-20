@@ -47,6 +47,10 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 		outputs.push_back( new BVS::Connector<cv::Mat>(std::string("out")+std::to_string(i+1), BVS::ConnectorType::OUTPUT) );
 	}
 	g.getNextFrame();
+	
+	std::map<int, int> remap;
+	for (unsigned int i=0; i<numCameras; i++) remap[g.getCameraSerialNumber(i)]=i;
+	for (auto& it: remap) camOrder.push_back(it.second);
 
 	triggerRunning = true;
 	trigger = std::thread(&camGrasshopper::triggerCameras, this);
@@ -77,7 +81,7 @@ BVS::Status camGrasshopper::execute()
 	cv::Mat img;
 	for (unsigned int i = 0; i < numCameras; ++i)
 	{
-		img = g.getImage(i);
+		img = g.getImage(camOrder[i]);
 		outputs[i]->send(img);
 	}
 

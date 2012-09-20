@@ -1,9 +1,10 @@
 #ifndef CAMGRASSHOPPER_H
 #define CAMGRASSHOPPER_H
 
-#include<condition_variable>
-#include<mutex>
-#include<thread>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 #include "bvs/module.h"
 #include "grasshopper.h"
@@ -65,6 +66,7 @@ class camGrasshopper : public BVS::Module
 		void triggerCameras();
 
 		std::vector<BVS::Connector<cv::Mat>* > outputs;
+		std::vector<int> camOrder;
 
 		camGrasshopper(const camGrasshopper&) = delete; /**< -Weffc++ */
 		camGrasshopper& operator=(const camGrasshopper&) = delete; /**< -Weffc++ */
