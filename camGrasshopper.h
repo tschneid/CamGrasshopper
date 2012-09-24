@@ -82,10 +82,8 @@ class camGrasshopper : public BVS::Module
 
 		bool triggerRunning;
 		bool triggerExit;
-		std::mutex masterMutex;
+		std::mutex mutex;
 		std::unique_lock<std::mutex> masterLock;
-		std::mutex triggerMutex;
-		std::unique_lock<std::mutex> triggerLock;
 		std::condition_variable triggerCond;
 		std::thread trigger;
 };

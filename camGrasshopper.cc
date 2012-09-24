@@ -22,10 +22,8 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, shutterSpeed(config.getValue<int>(id + ".shutterSpeed", -1))
 	, triggerRunning(false)
 	, triggerExit(false)
-	, masterMutex()
-	, masterLock(masterMutex)
-	, triggerMutex()
-	, triggerLock(triggerMutex)
+	, mutex()
+	, masterLock(mutex)
 	, triggerCond()
 	, trigger()
 {
@@ -64,6 +62,7 @@ camGrasshopper::~camGrasshopper()
 {
 	triggerExit = true;
 	triggerRunning = true;
+	masterLock.unlock();
 	triggerCond.notify_one();
 	if (trigger.joinable()) trigger.join();
 
@@ -95,6 +94,7 @@ BVS::Status camGrasshopper::execute()
 
 void camGrasshopper::triggerCameras()
 {
+	std::unique_lock<std::mutex> triggerLock(mutex);
 	while (!triggerExit)
 	{
 		triggerCond.wait(triggerLock, [&](){ return triggerRunning; });
