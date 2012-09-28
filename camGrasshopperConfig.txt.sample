@@ -8,4 +8,4 @@
 masterCam = 0
 
 # shutter speed in ms (lower shutter speed will result in higher noise)
- shutterSpeed = 50
+shutterSpeed = 20

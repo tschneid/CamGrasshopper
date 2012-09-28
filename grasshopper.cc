@@ -88,7 +88,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             errorState = true;
         }
         //std::cout << i <<":\n";
-        //printCamInfo(&camInfo); 
+        // printCamInfo(&camInfo); 
 
         // Set all cameras to a specific mode and frame rate so they
         // can be synchronized.
@@ -534,6 +534,8 @@ bool Grasshopper::restoreDefaultProperties(const int i)
 
 bool Grasshopper::testPropertiesForManualMode()
 {
+    bool output = false; // cout some information
+
     // offset, controls level of black in an image
     manualProp.insert(std::pair<PropertyType, bool>(BRIGHTNESS, false)); // no auto mode supported
     // allows the camera to automatically control shutter and/or gain
@@ -561,6 +563,7 @@ bool Grasshopper::testPropertiesForManualMode()
     // can be set to manual mode)
     // @TODO This assumes, that the properties are the same for each camera!
     //std::cout << "*** CAMERA PROPERTIES ***\n";
+
     for (std::map<PropertyType,bool>::iterator it = manualProp.begin(); it != manualProp.end(); ++it)
     {
         PropertyInfo propInfo;
@@ -573,11 +576,11 @@ bool Grasshopper::testPropertiesForManualMode()
         }
 
         // do not output rest
-        continue;
+        // continue;
 
         // Only care about a property which is present and
         // can be set to auto mode.
-        std::cout << toString((*it).first);
+        if (output) std::cout << toString((*it).first);
         if (propInfo.present)
         {
             if (propInfo.autoSupported)
@@ -588,21 +591,21 @@ bool Grasshopper::testPropertiesForManualMode()
                 {
                     // This property has to be considered later on.
                     (*it).second = true;
-                    std::cout << " [will be controlled by master camera]\n";
+                    if (output) std::cout << " [will be controlled by master camera]\n";
                 }
                 else
                 {
-                    std::cout << " [no manual mode supported]\n";
+                    if (output) std::cout << " [no manual mode supported]\n";
                 }
             }
             else
             {
-                std::cout << " [no auto mode supported]\n";
+                if (output) std::cout << " [no auto mode supported]\n";
             }
         }
         else
         {
-            std::cout << " [not present on this camera type]\n";
+            if (output) std::cout << " [not present on this camera type]\n";
         }
     }
 
@@ -1236,9 +1239,20 @@ std::string Grasshopper::toString(const PropertyType& propType)
 #ifdef _STANDALONE
 int main(int argc, char** argv)
 {
-    bool gui = true;
+    bool gui = false;
+    bool saveImages = false; // only works without gui
+    int trigger = 0; 
 
-    // @TODO FlyCap 2.3
+    for(int i = 0; i < argc; i++)
+    {
+        std::string arg = argv[i];
+        if (arg.compare("--gui") == 0  ||  arg.compare("-g") == 0)
+            gui = true;
+        if (arg.compare("--save") == 0)
+            saveImages = true;
+        if (arg.compare("--trigger") == 0)
+            trigger = atoi(argv[i+1]);
+    }       
 
     // The time from a software trigger to the start of the shutter consists of
     // 1. Register write request to register write response (approx. 49.85us)
@@ -1273,6 +1287,8 @@ int main(int argc, char** argv)
     if (gui)
     {
 
+        //MultiSyncLibrary::MULTISYNCLIBRARY_API SyncManager sm();
+
         // Initialize okapi GUI
         okapi::GuiThread gui;
         okapi::ImageWindow* imgWin = new okapi::ImageWindow("Anzeige");
@@ -1286,7 +1302,7 @@ int main(int argc, char** argv)
         widWin->setButton("Show Gain", false);
 
         // Initialize cameras
-        Grasshopper g;
+        Grasshopper g(trigger);
         g.resetBus(); // does not change anything...
 
 
@@ -1304,11 +1320,16 @@ int main(int argc, char** argv)
         // get number of cameras
         int numCameras = g.getNumCameras();
 
+        // set cam 0 to master and distribute its properties (shutter, gain, etc.)
+        g.distributeCamProperties(0);
+        // trigger and catch frames
+        g.getNextFrame();
+
         int counter = 0;
         // main loop
         for (;;)
         {
-            counter++;
+            /*counter++;
             if (counter == 50)
             {
                 g.setROI(0,0,1000,1000,1);
@@ -1320,12 +1341,7 @@ int main(int argc, char** argv)
             if (counter == 150)
             {
                 g.setROI(20,30,100,400,1);
-            }
-
-            // set cam 0 to master and distribute its properties (shutter, gain, etc.)
-            g.distributeCamProperties(0);
-            // trigger and catch frames
-            g.getNextFrame();
+            }*/
 
             // g.saveImages(i); // this would save them to disk
 
@@ -1364,6 +1380,11 @@ int main(int argc, char** argv)
 
             // end application if okapi window is closed
             if (!imgWin->getWindowState() || !widWin->getWindowState()) break;
+
+            // set cam 0 to master and distribute its properties (shutter, gain, etc.)
+            g.distributeCamProperties(0);
+            // trigger and catch frames
+            g.getNextFrame();
         }
 
         // restore default values before stopping
@@ -1379,7 +1400,7 @@ int main(int argc, char** argv)
     else
     {
         // minimal example program
-        Grasshopper g;
+        Grasshopper g(trigger);
         if (!g.initCameras(VIDEOMODE(1600,1200,Y8), FRAMERATE_15))
         {
             printf("Could not initialize the cameras! Exiting... \n");
@@ -1389,7 +1410,7 @@ int main(int argc, char** argv)
         g.setShutter(20);
 
         int numCameras = g.getNumCameras();
-        int numImages = 20;
+        int numImages = 200;
         for (int i = 0; i < numImages; ++i)
         {
             g.distributeCamProperties(0);
@@ -1400,7 +1421,7 @@ int main(int argc, char** argv)
                 cv::Mat img = g.getImage(cam);
             }
 
-            g.saveImages(i);
+            if (saveImages) g.saveImages(i);
 
             double fps = g.tickFPS();
             std::cout << "frame " << i+1 << "/" << numImages <<" , fps: " << fps << "\n";
