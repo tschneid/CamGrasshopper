@@ -86,8 +86,13 @@
 #include <okapi/utilities/timer.hpp>
 #endif
 
-
 using namespace FlyCapture2;
+
+
+const int NO_TRIGGER = 0;
+const int SOFTWARE_TRIGGER = 1;
+const int FIREWIRE_TRIGGER = 2;
+const int HARDWARE_TRIGGER = 3;
 
 
 class Grasshopper
@@ -97,13 +102,6 @@ public:
 	*/
 	Grasshopper(int triggerSwitch = NO_TRIGGER);
 	
-	enum Trigger
-	{
-		NO_TRIGGER,
-		SOFTWARE_TRIGGER,
-		FIREWIRE_TRIGGER,
-		HARDWARE_TRIGGER
-	};
 
 #ifdef _STANDALONE
 	///////////////////////////////////////////////////////////////////////////
