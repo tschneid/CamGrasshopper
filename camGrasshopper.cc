@@ -95,6 +95,7 @@ BVS::Status camGrasshopper::execute()
 
 void camGrasshopper::triggerCameras()
 {
+	BVS::nameThisThread("camGH.trigger");
 	std::unique_lock<std::mutex> triggerLock(mutex);
 	while (!triggerExit)
 	{
