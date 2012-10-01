@@ -5,28 +5,33 @@
 // Okapi Timer for benchmarking and debugging
 //#define _WITH_TIMER
 
-// For use without okapi you have to undefine _STANDALONE and _WITH_TIMER.
+// main() function with minimal example program (using okapi gui)
+//#define _STANDALONE
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Specify the Trigger Mode
-//#define SOFTWARE_TRIGGER 1  // A register on the cameras will be written to initiate the capture of a frame.
-//#define FIREWIRE_TRIGGER 0  // The cameras synchronize over the firewire bus. Therefore they have to be on the same bus (no dual-bus).
-//#define HARDWARE_TRIGGER 0  // The cameras receive an external signal to trigger frame capturing at a specified GPIO port.
-// You may also undefine all trigger modes to reject triggering the cameras (and get asynchronous images, but a higher frame rate).
-
+// Triggering Info
+//
+// SOFTWARE_TRIGGER: A register on the cameras will be written to initiate the capture of a frame.
+// FIREWIRE_TRIGGER: The cameras synchronize over the firewire bus. Therefore they have to be on the same bus (no dual-bus).
+// HARDWARE_TRIGGER: The cameras receive an external signal to trigger frame capturing at a specified GPIO port.
+// 
+// To use the Firewire Trigger the cameras have to be on the same bus (no dual-bus).
+// Cameras on the same bus should synchronize automatically! The difference between
+// the Firewire trigger and no trigger is the call to FlyCapture:
+// "StartSyncCapture()" vs. "StartCapture()"
+//
+// Using the Firewire trigger resulted in some polling problems, so I recommend to use
+// no trigger at all, when the cameras are on the same bus.
 ///////////////////////////////////////////////////////////////////////////////
 
-// Throw error if more than one trigger mode is specified
-//#if (SOFTWARE_TRIGGER && HARDWARE_TRIGGER) || (SOFTWARE_TRIGGER && FIREWIRE_TRIGGER) || (HARDWARE_TRIGGER && FIREWIRE_TRIGGER)
-//    #error Only one trigger mode can be specified!
-//#endif
 
 // Makro for Flycapture Videomodes
 #define VIDEOMODE(width,height,encoding) VIDEOMODE_##width##x##height##encoding
 
-
-// === Possible video modes ========================
+///////////////////////////////////////////////////////////////////////////////
+// Possible video modes
+//
 // VIDEOMODE_160x120YUV444 		160x120 YUV444.
 // VIDEOMODE_320x240YUV422 		320x240 YUV422.
 // VIDEOMODE_640x480YUV411 		640x480 YUV411.
@@ -51,7 +56,7 @@
 // VIDEOMODE_1600x1200Y8 		1600x1200 8-bit.
 // VIDEOMODE_1600x1200Y16 		1600x1200 16-bit.
 // VIDEOMODE_FORMAT7
-// =================================================
+///////////////////////////////////////////////////////////////////////////////
 
 
 #include "FlyCapture2.h"
@@ -90,7 +95,15 @@ class Grasshopper
 public:
 	/** Constructor
 	*/
-	Grasshopper(int triggerSwitch = 0);
+	Grasshopper(int triggerSwitch = NO_TRIGGER);
+	
+	enum Trigger
+	{
+		NO_TRIGGER,
+		SOFTWARE_TRIGGER,
+		FIREWIRE_TRIGGER,
+		HARDWARE_TRIGGER
+	};
 
 #ifdef _STANDALONE
 	///////////////////////////////////////////////////////////////////////////
@@ -184,11 +197,7 @@ private:
     	 embedGPIOPinState, embedROIPosition;
     double old_ts, fps;
 
-	// trigger Mode:
-	// 0 no trigger
-	// 1 software trigger
-	// 2 firewire trigger
-	// 3 hardware trigger
+	// trigger Mode
 	int triggerSwitch;
 
 };

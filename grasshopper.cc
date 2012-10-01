@@ -132,7 +132,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
     testPropertiesForManualMode();
 
 
-    if (triggerSwitch==2)
+    if (triggerSwitch==FIREWIRE_TRIGGER)
     {
         error = Camera::StartSyncCapture( numCameras, (const Camera**)ppCameras );
         if (error != PGRERROR_OK)
@@ -146,7 +146,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
         }
     }
     else
-    if (triggerSwitch==1 || triggerSwitch==3)
+    if (triggerSwitch==SOFTWARE_TRIGGER || triggerSwitch==HARDWARE_TRIGGER)
     {
         const unsigned int millisecondsToSleep = 100;
         unsigned int regVal = 0;
@@ -178,7 +178,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             } while ((regVal & k_powerVal) == 0);
 
 
-            if (triggerSwitch==3)
+            if (triggerSwitch==HARDWARE_TRIGGER)
             {
                 // Check for external trigger support
                 TriggerModeInfo triggerModeInfo;
@@ -221,9 +221,9 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             triggerMode.mode = TRIGGER_MODE_NUMBER;
             triggerMode.parameter = 0;
             // A source of 7 means software trigger
-            if (triggerSwitch==1) triggerMode.source = 7;
+            if (triggerSwitch==SOFTWARE_TRIGGER) triggerMode.source = 7;
             // Triggering the camera externally using specified source pin.
-            if (triggerSwitch==3) triggerMode.source = GPIO_TRIGGER_SOURCE_PIN;
+            if (triggerSwitch==HARDWARE_TRIGGER) triggerMode.source = GPIO_TRIGGER_SOURCE_PIN;
 
             error = ppCameras[i]->SetTriggerMode( &triggerMode );
             if (error != PGRERROR_OK)
@@ -270,12 +270,12 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
                 errorState = true;
             }
 
-            if (triggerSwitch==1 && !CheckSoftwareTriggerPresence( ppCameras[i] ))
+            if (triggerSwitch==SOFTWARE_TRIGGER && !CheckSoftwareTriggerPresence( ppCameras[i] ))
             {
                 printf( "SOFT_ASYNC_TRIGGER not implemented on this camera! Stopping application\n");
                 errorState = true;
             }
-            if (triggerSwitch==3) printf( "Trigger the camera by sending a trigger pulse to GPIO%d.\n", GPIO_TRIGGER_SOURCE_PIN );
+            if (triggerSwitch==HARDWARE_TRIGGER) printf( "Trigger the camera by sending a trigger pulse to GPIO%d.\n", GPIO_TRIGGER_SOURCE_PIN );
         }
 
         if (errorState)
@@ -302,7 +302,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
 
 bool Grasshopper::stopCameras()
 {
-    if (triggerSwitch==1 || triggerSwitch==3)
+    if (triggerSwitch==SOFTWARE_TRIGGER || triggerSwitch==HARDWARE_TRIGGER)
     {
         // Turn trigger mode off.
         for (unsigned int i = 0; i < numCameras; ++i)
@@ -340,7 +340,7 @@ bool Grasshopper::stopCameras()
 
 bool Grasshopper::getNextFrame()
 {
-    if (triggerSwitch==1)
+    if (triggerSwitch==SOFTWARE_TRIGGER)
     {
         // Fire software trigger
 #ifdef _WITH_TIMER
@@ -450,35 +450,34 @@ bool Grasshopper::distributeCamProperties(const unsigned int master)
 
             for (unsigned int i = 0; i < numCameras; ++i)
             {
-                if (i != master)
-                {
-                    // set properties for all slave cameras
-                    Property slaveProp;
-                    slaveProp.type = masterProp.type;
-                    slaveProp.onOff = true;
-                    slaveProp.autoManualMode = false;
+                if (i == master) break;
 
-                    switch (slaveProp.type)
-                    {
-                        case WHITE_BALANCE:
-                            slaveProp.valueA = masterProp.valueA;
-                            slaveProp.valueB = masterProp.valueB;
-                            break;
-                        case SHARPNESS:
-                            slaveProp.valueA = masterProp.valueA;
-                            break;
-                        default:
-                            slaveProp.absControl = true;
-                            slaveProp.absValue = masterProp.absValue;
-                            break;
-                    }
-                    
-                    error = ppCameras[i]->SetProperty(&slaveProp);
-                    if (error != PGRERROR_OK)
-                    {
-                        printError(error);
-                        return false;
-                    }
+                // set properties for all slave cameras
+                Property slaveProp;
+                slaveProp.type = masterProp.type;
+                slaveProp.onOff = true;
+                slaveProp.autoManualMode = false;
+
+                switch (slaveProp.type)
+                {
+                    case WHITE_BALANCE:
+                        slaveProp.valueA = masterProp.valueA;
+                        slaveProp.valueB = masterProp.valueB;
+                        break;
+                    case SHARPNESS:
+                        slaveProp.valueA = masterProp.valueA;
+                        break;
+                    default:
+                        slaveProp.absControl = true;
+                        slaveProp.absValue = masterProp.absValue;
+                        break;
+                }
+                
+                error = ppCameras[i]->SetProperty(&slaveProp);
+                if (error != PGRERROR_OK)
+                {
+                    printError(error);
+                    return false;
                 }
             }
         }
@@ -779,8 +778,6 @@ bool Grasshopper::setShutter(const int milliseconds)
     gain.type = GAIN;
     gain.onOff = true;
     gain.autoManualMode = true;
-    //gain.absControl = true;
-    //gain.absValue = 1; // dB
 
     // autoManualMode of
     //   SHUTTER is off
@@ -788,12 +785,7 @@ bool Grasshopper::setShutter(const int milliseconds)
     // The auto exposure algorithm will regulate gain
     // to maintain image brightness.
 
-    // @TODO auto_exposure_range for minimal and maximal shutter time?
-
-    //Property prop;
-    //prop.type = AUTO_EXPOSURE;
-    //prop.onOff = false;
-    
+    // @TODO auto_exposure_range for minimal and maximal shutter time?    
 
     for (unsigned int i = 0; i < numCameras; ++i)
     {
@@ -810,8 +802,6 @@ bool Grasshopper::setShutter(const int milliseconds)
             printError( error );
             return false;
         }
-
-        //ppCameras[i]->SetProperty(&prop);
     }
     return true;   
 }
@@ -1315,6 +1305,8 @@ int main(int argc, char** argv)
         // print possible video modes
         g.printVideoModes(0 /*cam index*/);
 
+        // set shutter to specified milliseconds,
+        // gain will be autmatically set to auto
         g.setShutter(20);
 
         // get number of cameras
@@ -1322,6 +1314,7 @@ int main(int argc, char** argv)
 
         // set cam 0 to master and distribute its properties (shutter, gain, etc.)
         g.distributeCamProperties(0);
+
         // trigger and catch frames
         g.getNextFrame();
 
