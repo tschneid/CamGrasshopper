@@ -280,18 +280,16 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
 
         if (errorState)
             return false;
-
-        for (unsigned int i = 0; i < numCameras; ++i)
-        {
-
-
-        }
     }
-    else
+    else // no trigger
     {
         for ( unsigned int i = 0; i < numCameras; ++i )
         {
-            ppCameras[i]->StartCapture();
+            error = ppCameras[i]->StartCapture();
+            if (error != PGRERROR_OK)
+            {
+                printError( error );
+            }
         }
     }
 
@@ -450,34 +448,36 @@ bool Grasshopper::distributeCamProperties(const unsigned int master)
 
             for (unsigned int i = 0; i < numCameras; ++i)
             {
-                if (i == master) break;
-
-                // set properties for all slave cameras
-                Property slaveProp;
-                slaveProp.type = masterProp.type;
-                slaveProp.onOff = true;
-                slaveProp.autoManualMode = false;
-
-                switch (slaveProp.type)
+                if (i != master)
                 {
-                    case WHITE_BALANCE:
-                        slaveProp.valueA = masterProp.valueA;
-                        slaveProp.valueB = masterProp.valueB;
-                        break;
-                    case SHARPNESS:
-                        slaveProp.valueA = masterProp.valueA;
-                        break;
-                    default:
-                        slaveProp.absControl = true;
-                        slaveProp.absValue = masterProp.absValue;
-                        break;
-                }
-                
-                error = ppCameras[i]->SetProperty(&slaveProp);
-                if (error != PGRERROR_OK)
-                {
-                    printError(error);
-                    return false;
+
+                    // set properties for all slave cameras
+                    Property slaveProp;
+                    slaveProp.type = masterProp.type;
+                    slaveProp.onOff = true;
+                    slaveProp.autoManualMode = false;
+
+                    switch (slaveProp.type)
+                    {
+                        case WHITE_BALANCE:
+                            slaveProp.valueA = masterProp.valueA;
+                            slaveProp.valueB = masterProp.valueB;
+                            break;
+                        case SHARPNESS:
+                            slaveProp.valueA = masterProp.valueA;
+                            break;
+                        default:
+                            slaveProp.absControl = true;
+                            slaveProp.absValue = masterProp.absValue;
+                            break;
+                    }
+                    
+                    error = ppCameras[i]->SetProperty(&slaveProp);
+                    if (error != PGRERROR_OK)
+                    {
+                        printError(error);
+                        return false;
+                    }
                 }
             }
         }

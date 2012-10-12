@@ -95,6 +95,7 @@ const int FIREWIRE_TRIGGER = 2;
 const int HARDWARE_TRIGGER = 3;
 
 
+
 class Grasshopper
 {
 public:
