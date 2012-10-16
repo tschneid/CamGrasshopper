@@ -199,6 +199,8 @@ private:
 	// trigger Mode
 	int triggerSwitch;
 
+	Grasshopper(const Grasshopper&) = delete; /**< -Weffc++ */
+	Grasshopper& operator=(const Grasshopper&) = delete; /**< -Weffc++ */
 };
 
 #endif

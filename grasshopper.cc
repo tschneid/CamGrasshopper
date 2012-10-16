@@ -13,6 +13,11 @@ Grasshopper::Grasshopper(int triggerSwitch)
   // source pin for hardware trigger
   GPIO_TRIGGER_SOURCE_PIN(0),
   TRIGGER_MODE_NUMBER(14),
+  manualProp(),
+  error(),
+  busMgr(),
+  ppCameras(nullptr),
+  images(nullptr),
   // information embedded in each image
   embedTimestamp(true),
   embedGain(false),
