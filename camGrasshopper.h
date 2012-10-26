@@ -71,8 +71,6 @@ class camGrasshopper : public BVS::Module
 		camGrasshopper(const camGrasshopper&) = delete; /**< -Weffc++ */
 		camGrasshopper& operator=(const camGrasshopper&) = delete; /**< -Weffc++ */
 
-		BVS::Config config; /**< Private config object. */
-
 		Grasshopper g;
 		unsigned int numCameras;
 
