@@ -9,7 +9,7 @@
 # 1 software trigger
 # 2 firewire trigger (default)
 # 3 hardware trigger
-trigger = 1
+trigger = 2
 
 # master camera index
 masterCam = 0
