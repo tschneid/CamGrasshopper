@@ -86,5 +86,12 @@ class camGrasshopper : public BVS::Module
 		std::thread trigger;
 };
 
+
+
+/** This calls a macro to create needed module utilities. */
+BVS_MODULE_UTILITIES(camGrasshopper)
+
+
+
 #endif //CAMGRASSHOPPER_H
 
