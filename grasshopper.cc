@@ -5,6 +5,97 @@
 using namespace FlyCapture2;
 
 
+template <typename T, typename U> T clamp255(const U& value) 
+{
+    return value < 0 ? 0 : (value > 255 ? 255 : value); 
+}
+
+// not optimized, but better to read:
+// static void yuv422toRGB_niceToRead(const cv::Mat& src, cv::Mat& dest)
+// {
+//     int r,g,b;
+//     int rows = src.rows;
+//     int cols = src.cols;
+//     dest = cv::Mat(rows,cols,CV_8UC3);
+//     for (int i = 0, j = 0; i < rows*cols*2; i = i+4, j = j+6)
+//     {
+//         int u = src.data[i];
+//         int y1 = src.data[i+1];
+//         int v = src.data[i+2];
+//         int y2 = src.data[i+3];
+//         int c = y1 - 16;
+//         int d = u - 128;
+//         int e = v - 128;
+//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
+//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
+//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
+//         // RGB 1
+//         dest.data[j] = r;
+//         dest.data[j+1] = g;
+//         dest.data[j+2] = b;
+//         c = y2 - 16;
+//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
+//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
+//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
+//         // RGB 2
+//         dest.data[j+3] = r;
+//         dest.data[j+4] = g;
+//         dest.data[j+5] = b;
+//     }
+// }
+
+static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest)
+{
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_START("yuv422toRGB()");
+    // needs ca. 50 ms per call on i14pc186
+    // maybe OpenCL?
+#endif
+    
+    dest = cv::Mat(src.rows,src.cols,CV_8UC3);
+
+    for (int i = 0, j = 0; i < src.rows*src.cols*2; i = i+4, j = j+6)
+    {
+        // read first two bytes of yuv422 image
+        unsigned char u = src.data[i];
+        unsigned char y1 = src.data[i+1];
+        unsigned char v = src.data[i+2];
+        unsigned char y2 = src.data[i+3];
+
+        // do some optimization stuff
+        int c = 298*(y1 - 16);
+        int d = u - 128;
+        int d1 = 100 * d;
+        int d2 = 516 * d;
+        int e = v - 128;
+        int e1 = 409 * e;
+        int e2 = 208 * e;
+        int f1 = e1 + 128;
+        int f2 = d1 - e2 + 128;
+        int f3 = d2 + 128;
+
+        // calculate first 3 RGB bytes
+        unsigned char r = clamp255<unsigned char, int>((c + f1) >> 8);
+        unsigned char g = clamp255<unsigned char, int>((c + f2) >> 8);
+        unsigned char b = clamp255<unsigned char, int>((c + f3) >> 8);
+        dest.data[j] = r;
+        dest.data[j+1] = g;
+        dest.data[j+2] = b;
+
+        // calculate second 3 RGB bytes
+        c = 298*(y2 - 16);
+        r = clamp255<int>((c + f1) >> 8);
+        g = clamp255<int>((c + f2) >> 8);
+        b = clamp255<int>((c + f3) >> 8);
+        dest.data[j+3] = r;
+        dest.data[j+4] = g;
+        dest.data[j+5] = b;
+    }
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_STOP("yuv422toRGB()");
+#endif
+}
+
 
 
 Grasshopper::Grasshopper(int triggerSwitch)
@@ -21,9 +112,9 @@ Grasshopper::Grasshopper(int triggerSwitch)
   // information embedded in each image
   embedTimestamp(true),
   embedGain(false),
-  embedShutter(true),
+  embedShutter(false),
   embedBrightness(false),
-  embedExposure(true),
+  embedExposure(false),
   embedWhiteBalance(false),
   embedFrameCounter(false),
   embedStrobePattern(false),
@@ -407,29 +498,46 @@ cv::Mat Grasshopper::getImage(const int i)
     rows = images[i].GetRows();
     cols = images[i].GetCols();
     unsigned int bpp = images[i].GetBitsPerPixel();
-
-    // std::cout << "getImage: " << bpp << "bits per pixel" << "\n";
-
-    // @TODO
-    // This allows only RGB and Y8!
-    // Y16 and Y422 use 16 bits for red, green and blue,
-    // so okapi says, that the image format (with 2 channels)
-    // is not supported.
+    unsigned int channels = bpp/8;
   
-    cv::Mat img(rows,cols,CV_8UC(bpp/8));
+    cv::Mat img(rows,cols,CV_8UC(channels));
 
     // Set the pointer of the cv::Mat data to the image data
-    // (Is this stable? Definitely not thread-safe...)
     img.data = images[i].GetData();
-    if (bpp/8 == 3) cv::cvtColor(img,img,CV_BGR2RGB);
-    
-    // Alternatively copy the data to the cv::Mat
-    //memcpy(img.data, images[i].GetData(), images[i].GetDataSize()); // the size is 1024*768*3 Byte 
+
+    // The image is actually BGR and we have to
+    // change B and R channel
+    if (channels == 3)
+    {
+        cv::cvtColor(img,img,CV_BGR2RGB);
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("getImage()");
+        OKAPI_TIMER_STOP("getImage()");
 #endif
+        return img;
+    }
+
+    // The image is probably YUV422 and we have
+    // to convert it to RGB.
+    // (Or it is Y16, then this should lead to some
+    // interesting results...)
+    if (channels == 2) 
+    {
+        cv::Mat imgRGB;
+        yuv422toRGB(img, imgRGB);
+#ifdef _WITH_TIMER
+        OKAPI_TIMER_STOP("getImage()");
+#endif
+        return imgRGB;
+    }
+    
+#ifdef _WITH_TIMER
+        OKAPI_TIMER_STOP("getImage()");
+#endif
+    // The image is Y8 (grayscale)
     return img;
 }
+
+
 
 bool Grasshopper::distributeCamProperties(const unsigned int master)
 {
@@ -1286,7 +1394,7 @@ int main(int argc, char** argv)
 
         // Initialize okapi GUI
         okapi::GuiThread gui;
-        okapi::ImageWindow* imgWin = new okapi::ImageWindow("Anzeige");
+        okapi::ImageWindow* imgWin = new okapi::ImageWindow("Display");
         gui.addClient(imgWin);
         okapi::WidgetWindow* widWin = new okapi::WidgetWindow("Settings");
         gui.addClient(widWin);
@@ -1301,7 +1409,7 @@ int main(int argc, char** argv)
         g.resetBus(); // does not change anything...
 
 
-        if (!g.initCameras(VIDEOMODE(1600,1200,Y8), FRAMERATE_15))
+        if (!g.initCameras(VIDEOMODE(1600,1200,YUV422), FRAMERATE_15))
         {
             printf("Could not initialize the cameras! Exiting... \n");
             return -1;
@@ -1312,7 +1420,7 @@ int main(int argc, char** argv)
 
         // set shutter to specified milliseconds,
         // gain will be autmatically set to auto
-        g.setShutter(20);
+        g.setShutter(40);
 
         // get number of cameras
         int numCameras = g.getNumCameras();
