@@ -90,16 +90,14 @@
 using namespace FlyCapture2;
 
 
-const int NO_TRIGGER = 0;
-const int SOFTWARE_TRIGGER = 1;
-const int FIREWIRE_TRIGGER = 2;
-const int HARDWARE_TRIGGER = 3;
-
-
-
 class Grasshopper
 {
 public:
+	static const int NO_TRIGGER = 0;
+	static const int SOFTWARE_TRIGGER = 1;
+	static const int FIREWIRE_TRIGGER = 2;
+	static const int HARDWARE_TRIGGER = 3;
+
 	/** Constructor
 	*/
 	Grasshopper(int triggerSwitch = NO_TRIGGER, bool BGRtoRGB = false);
