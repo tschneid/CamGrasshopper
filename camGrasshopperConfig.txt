@@ -1,18 +1,44 @@
-# This is camGrasshopper's sample config.
-# Copy it to your 'bin' directory so the system can find it.
 
-# replace this id with your used id
+# The '*' marks default values
+
+# resolution = 640,480 | 800,600 | 1024,768* | 1280,960 | 1600,1200
+# encoding = y8* | y16 | yuv422 | rgb
+# Some videomodes (combination of resolution and encoding)
+# might not be applicable with the cameras.
+
+# framerate = 3.75 | 7.5 | 15* | 30 | 60 | 120 | 240
+# Other factors like a long integration time (high shutter)
+# or the bus bandwidth limitation might decrease
+# the actual received framerate.
+
+# trigger = 0* | 1 | 2 | 3
+# The trigger specifies how to trigger the
+# image integration of the cameras.
+# 0 = no trigger
+# 1 = software trigger
+# 2 = firewire trigger (only on the same bus)
+# 3 = hardware trigger (pulse on GPIO pin)
+
+# masterCam = 0* | 1 | ...
+# The master camera will define the shutter speed, gain, etc.,
+# and distribute the properties to the other cameras.
+# If no master camera is specified, each camera will determine
+# the properties independently.
+
+# shutter = x
+# determines the shutter speed (integration time) in milliseconds.
+# Lower shutter speed will result in higher gain and therefore noise.
+# If no shutter speed is specified, the camera will determine the
+# shutter speed (this might be slow)
+
+# ===============================================================================
+
 [capture]
 
-# trigger Mode:
-# 0 no trigger
-# 1 software trigger
-# 2 firewire trigger (default)
-# 3 hardware trigger
-trigger = 2
+resolution = 1600,1200
+encoding = yuv422
+framerate = 15
 
-# master camera index
+trigger = 0
 masterCam = 0
-
-# shutter speed in ms (lower shutter speed will result in higher noise)
-shutterSpeed = 20
+shutter = 50

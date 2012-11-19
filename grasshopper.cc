@@ -51,6 +51,7 @@ static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest)
     // needs ca. 50 ms per call on i14pc186
     // maybe OpenCL?
 #endif
+    //asm("");
     
     dest = cv::Mat(src.rows,src.cols,CV_8UC3);
 
@@ -128,6 +129,11 @@ Grasshopper::Grasshopper(int triggerSwitch)
     
 }
 
+
+bool Grasshopper::initCameras(const int width, const int height, const std::string& encoding, const float& framerate)
+{
+    return initCameras(getVideoMode(width,height,encoding), getFrameRate(framerate));
+}
 
 
 bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
@@ -1333,6 +1339,51 @@ std::string Grasshopper::toString(const PropertyType& propType)
     return "";
 }
 
+VideoMode Grasshopper::getVideoMode(const int width, const int height, const std::string& _encoding)
+{
+    // YUV422, Y8, RGB Y16YUV 444 FORMAT7 YUV411
+    std::string encoding = _encoding;
+    std::transform(encoding.begin(), encoding.end(), encoding.begin(), ::toupper);
+    if      (encoding.compare("FORMAT7") == 0)                                return VIDEOMODE_FORMAT7;
+    else if (encoding.compare("YUV444") == 0 && width==160 && height==120)    return VIDEOMODE_160x120YUV444;
+    else if (encoding.compare("YUV444") == 0 && width==640 && height==480)    return VIDEOMODE_640x480YUV411;
+    else if (encoding.compare("YUV422") == 0 && width==320 && height==240)    return VIDEOMODE_320x240YUV422;
+    else if (encoding.compare("YUV422") == 0 && width==640 && height==480)    return VIDEOMODE_640x480YUV422;
+    else if (encoding.compare("YUV422") == 0 && width==800 && height==600)    return VIDEOMODE_800x600YUV422;
+    else if (encoding.compare("YUV422") == 0 && width==1024 && height==768)   return VIDEOMODE_1024x768YUV422;
+    else if (encoding.compare("YUV422") == 0 && width==1280 && height==960)   return VIDEOMODE_1280x960YUV422;
+    else if (encoding.compare("YUV422") == 0 && width==1600 && height==1200)  return VIDEOMODE_1600x1200YUV422;
+    else if (encoding.compare("RGB") == 0    && width==640 && height==480)    return VIDEOMODE_640x480RGB;
+    else if (encoding.compare("RGB") == 0    && width==800 && height==600)    return VIDEOMODE_800x600RGB;
+    else if (encoding.compare("RGB") == 0    && width==1024 && height==768)   return VIDEOMODE_1024x768RGB;
+    else if (encoding.compare("RGB") == 0    && width==1280 && height==960)   return VIDEOMODE_1280x960RGB;
+    else if (encoding.compare("RGB") == 0    && width==1600 && height==1200)  return VIDEOMODE_1600x1200RGB;
+    else if (encoding.compare("Y8") == 0     && width==640 && height==480)    return VIDEOMODE_640x480Y8;
+    else if (encoding.compare("Y8") == 0     && width==800 && height==600)    return VIDEOMODE_800x600Y8;
+    else if (encoding.compare("Y8") == 0     && width==1024 && height==768)   return VIDEOMODE_1024x768Y8;
+    else if (encoding.compare("Y8") == 0     && width==1280 && height==960)   return VIDEOMODE_1280x960Y8;
+    else if (encoding.compare("Y8") == 0     && width==1600 && height==1200)  return VIDEOMODE_1600x1200Y8;
+    else if (encoding.compare("Y16") == 0    && width==640 && height==480)    return VIDEOMODE_640x480Y16;
+    else if (encoding.compare("Y16") == 0    && width==800 && height==600)    return VIDEOMODE_800x600Y16;
+    else if (encoding.compare("Y16") == 0    && width==1024 && height==768)   return VIDEOMODE_1024x768Y16;
+    else if (encoding.compare("Y16") == 0    && width==1280 && height==960)   return VIDEOMODE_1280x960Y16;
+    else if (encoding.compare("Y16") == 0    && width==1600 && height==1200)  return VIDEOMODE_1600x1200Y16;
+    else std::cout << "The specified video mode " << width << "x" << height << encoding << " is not supported.\n";
+    return NUM_VIDEOMODES;
+}
+
+FrameRate Grasshopper::getFrameRate(const float& fps)
+{
+    if      (fps == 3.75) return FRAMERATE_3_75;
+    else if (fps == 7.5)  return FRAMERATE_7_5;
+    else if (fps == 15)   return FRAMERATE_15;
+    else if (fps == 30)   return FRAMERATE_30;
+    else if (fps == 60)   return FRAMERATE_60;
+    else if (fps == 120)  return FRAMERATE_120;
+    else if (fps == 240)  return FRAMERATE_240;
+    else std::cout << "The specified framerate " << fps << "is not supported.\n";
+    return NUM_FRAMERATES;
+}
 
 
 
@@ -1409,7 +1460,7 @@ int main(int argc, char** argv)
         g.resetBus(); // does not change anything...
 
 
-        if (!g.initCameras(VIDEOMODE(1600,1200,YUV422), FRAMERATE_15))
+        if (!g.initCameras(1600,1200,"yuv422",15))
         {
             printf("Could not initialize the cameras! Exiting... \n");
             return -1;

@@ -2,8 +2,6 @@
 #include "grasshopper.h"
 #include <thread>
 
-
-
 // This is your module's constructor.
 // Please do not change its signature as it is called by the framework (so the
 // framework actually creates your module) and the framework assigns the unique
@@ -16,10 +14,13 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, bvs(bvs)
 	, outputs()
 	, camOrder()
-	, g(bvs.config.getValue<int>(id + ".trigger", 2))
+	, g(bvs.config.getValue<int>(id + ".trigger", 0))
 	, numCameras(0)
+	, resolution()
+	, encoding(bvs.config.getValue<std::string>(id + ".encoding", "Y8"))
+	, framerate(bvs.config.getValue<float>(id + ".framerate", 15))
 	, masterCam(bvs.config.getValue<int>(id + ".masterCam", -1))
-	, shutterSpeed(bvs.config.getValue<int>(id + ".shutterSpeed", -1))
+	, shutter(bvs.config.getValue<int>(id + ".shutter", -1))
 	, triggerRunning(false)
 	, triggerExit(false)
 	, mutex()
@@ -27,16 +28,16 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, triggerCond()
 	, trigger()
 {
-	// initialize cameras with defined video mode and frame rate
-	//g.initCameras(FlyCapture2::VIDEOMODE_1024x768RGB, FlyCapture2::FRAMERATE_7_5);
-	//g.initCameras(FlyCapture2::VIDEOMODE_1600x1200RGB, FlyCapture2::FRAMERATE_7_5);
-	//g.initCameras(FlyCapture2::VIDEOMODE_1600x1200Y8, FlyCapture2::FRAMERATE_15);
-	g.initCameras(FlyCapture2::VIDEOMODE_1024x768Y8, FlyCapture2::FRAMERATE_15);
+	bvs.config.getValue<int>(id + ".resolution", resolution);
+	if (resolution.size() != 2) resolution = {1024, 768};
+
+	g.initCameras(resolution[0], resolution[1], encoding, framerate);
+
 
 	//g.printVideoModes(0);
-	if (shutterSpeed > 0)
+	if (shutter > 0)
 	{
-		g.setShutter(shutterSpeed);
+		g.setShutter(shutter);
 	}
 	numCameras = g.getNumCameras();
 

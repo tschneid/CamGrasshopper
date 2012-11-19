@@ -74,8 +74,12 @@ class camGrasshopper : public BVS::Module
 		Grasshopper g;
 		unsigned int numCameras;
 
+		std::vector<int> resolution;
+		std::string encoding;
+		float framerate;
+
 		int masterCam; /**< Index for master cam. Slave cams will get image properties from master. */
-		int shutterSpeed; /**< Define shutter speed for higher frame rate. */
+		int shutter; /**< Define shutter speed for higher frame rate. */
 
 
 		bool triggerRunning;

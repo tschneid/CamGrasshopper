@@ -66,6 +66,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <map>
+#include <algorithm>
 
 #include <opencv2/core/core.hpp>
 #include <dc1394/dc1394.h>
@@ -119,6 +120,7 @@ public:
 	* \return true if the connections could be established with the specified parameters.
 	*/
 	bool initCameras(VideoMode videoMode, FrameRate frameRate);
+	bool initCameras(const int width, const int height, const std::string& encoding, const float& framerate);
 
 	/**  Close the connection to all cameras.
 	* \return true if the connections could be terminated correctly.
@@ -185,9 +187,11 @@ private:
     bool PollForTriggerReady( Camera* pCam );
     bool CheckSoftwareTriggerPresence( Camera* pCam );
     bool FireSoftwareTrigger( Camera** pCam );
-  	std::string toString(const VideoMode& vm);
-	std::string toString(const FrameRate& fps);
-	std::string toString(const PropertyType& prop);
+  	static std::string toString(const VideoMode& vm);
+	static std::string toString(const FrameRate& fps);
+	static std::string toString(const PropertyType& prop);
+	static VideoMode getVideoMode(const int width, const int height, const std::string& encoding);
+	static FrameRate getFrameRate(const float& fps);
 	///////////////////////////////////////////////////////////////////////////
 
 	bool embedTimestamp, embedGain, embedShutter,
