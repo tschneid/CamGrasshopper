@@ -47,7 +47,7 @@ template <typename T, typename U> T clamp255(const U& value)
 static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB = false)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("yuv422toRGB()");
+    OKAPI_TIMER_START("grasshopper: yuv422toRGB()");
 #endif
 
     dest = cv::Mat(src.rows,src.cols,CV_8UC3);
@@ -104,7 +104,7 @@ static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB =
     }
 
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("yuv422toRGB()");
+    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB()");
 #endif
 }
 
@@ -456,11 +456,11 @@ bool Grasshopper::getNextFrame()
     {
         // Fire software trigger
 #ifdef _WITH_TIMER
-        OKAPI_TIMER_START("FireSoftwareTrigger()");
+        OKAPI_TIMER_START("grasshopper: FireSoftwareTrigger()");
 #endif
         bool retVal = FireSoftwareTrigger(ppCameras);
 #ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("FireSoftwareTrigger()");
+        OKAPI_TIMER_STOP("grasshopper: FireSoftwareTrigger()");
 #endif
         /* for (unsigned int i = 0; i < numCameras; ++i)
            {
@@ -473,12 +473,12 @@ bool Grasshopper::getNextFrame()
         }
     }
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("RetrieveBuffer() of all cameras");
+    OKAPI_TIMER_START("grasshopper: RetrieveBuffer() of all cameras");
 #endif
     for (unsigned int i = 0; i < numCameras; ++i)
     {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("RetrieveBuffer() of one cameras");
+    OKAPI_TIMER_START("grasshopper: RetrieveBuffer() of one cameras");
 #endif
         // Write the frame in images
         error = ppCameras[i]->RetrieveBuffer( &images[i] );
@@ -487,12 +487,12 @@ bool Grasshopper::getNextFrame()
             printError( error );
         }
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("RetrieveBuffer() of one cameras");
+    OKAPI_TIMER_STOP("grasshopper: RetrieveBuffer() of one cameras");
 #endif
 
     }
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("RetrieveBuffer() of all cameras");
+    OKAPI_TIMER_STOP("grasshopper: RetrieveBuffer() of all cameras");
 #endif
 
     return true;
@@ -509,7 +509,7 @@ Image Grasshopper::getFlyCapImage(const int i)
 cv::Mat Grasshopper::getImage(const int i)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("getImage()");
+    OKAPI_TIMER_START("grasshopper: getImage()");
 #endif
 
     unsigned int rows, cols;
@@ -529,7 +529,7 @@ cv::Mat Grasshopper::getImage(const int i)
     {
         cv::cvtColor(img,img,CV_BGR2RGB);
 #ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("getImage()");
+        OKAPI_TIMER_STOP("grasshopper: getImage()");
 #endif
         return img;
     }
@@ -543,13 +543,13 @@ cv::Mat Grasshopper::getImage(const int i)
         cv::Mat imgRGB;
         yuv422toRGB(img, imgRGB, BGRtoRGB);
 #ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("getImage()");
+        OKAPI_TIMER_STOP("grasshopper: getImage()");
 #endif
         return imgRGB;
     }
     
 #ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("getImage()");
+        OKAPI_TIMER_STOP("grasshopper: getImage()");
 #endif
     // The image is Y8 (grayscale)
     return img;
@@ -560,7 +560,7 @@ cv::Mat Grasshopper::getImage(const int i)
 bool Grasshopper::distributeCamProperties(const unsigned int master)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("distributeCamProperties()");
+    OKAPI_TIMER_START("grasshopper: distributeCamProperties()");
 #endif
     
     for (std::map<PropertyType,bool>::iterator it = manualProp.begin(); it != manualProp.end(); ++it)
@@ -615,7 +615,7 @@ bool Grasshopper::distributeCamProperties(const unsigned int master)
     }
 
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("distributeCamProperties()");
+    OKAPI_TIMER_STOP("grasshopper: distributeCamProperties()");
 #endif
 
     return true;
@@ -625,7 +625,7 @@ bool Grasshopper::distributeCamProperties(const unsigned int master)
 bool Grasshopper::restoreDefaultProperties(const int i)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("restoreDefaultProperties()");
+    OKAPI_TIMER_START("grasshopper: restoreDefaultProperties()");
 #endif
     if (i < 0)
     {
@@ -656,7 +656,7 @@ bool Grasshopper::restoreDefaultProperties(const int i)
         }
     }
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("restoreDefaultProperties()");
+    OKAPI_TIMER_STOP("grasshopper: restoreDefaultProperties()");
 #endif
     return true;
 }
@@ -941,7 +941,7 @@ bool Grasshopper::setShutter(const int milliseconds)
 std::string Grasshopper::getProperty(const PropertyType& propType, const int i)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("getProperty()");
+    OKAPI_TIMER_START("grasshopper: getProperty()");
 #endif
 
     Property prop;
@@ -999,7 +999,7 @@ std::string Grasshopper::getProperty(const PropertyType& propType, const int i)
     }
     
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("getProperty()");
+    OKAPI_TIMER_STOP("grasshopper: getProperty()");
 #endif
     return propString.str();
 }
@@ -1080,7 +1080,7 @@ bool Grasshopper::setROI(const int x, const int y, const int width, const int he
 bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
 {
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("setROI()");
+    OKAPI_TIMER_START("grasshopper: setROI()");
 #endif
 
     // VideoMode currVideoMode;
@@ -1183,13 +1183,13 @@ bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
     }
 
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_START("setROI(): stop capture");
+    OKAPI_TIMER_START("grasshopper: setROI(): stop capture");
 #endif
 
     ppCameras[cam]->StopCapture(); // @TODO: This takes really long! (unlike in flycap GUI)
 
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("setROI(): stop capture");
+    OKAPI_TIMER_STOP("grasshopper: setROI(): stop capture");
 #endif
 
     //std::cout << "==== bytesPerPacket ====\n"
@@ -1209,7 +1209,7 @@ bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
 
 
 #ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("setROI()");
+    OKAPI_TIMER_STOP("grasshopper: setROI()");
 #endif
     return true;
 }
