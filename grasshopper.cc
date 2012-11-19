@@ -44,54 +44,65 @@ template <typename T, typename U> T clamp255(const U& value)
 //     }
 // }
 
-static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest)
+static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB = false)
 {
 #ifdef _WITH_TIMER
     OKAPI_TIMER_START("yuv422toRGB()");
-    // needs ca. 50 ms per call on i14pc186
-    // maybe OpenCL?
 #endif
-    //asm("");
-    
+
     dest = cv::Mat(src.rows,src.cols,CV_8UC3);
+    char channelSwitch = 0;
+    if (BGRtoRGB) channelSwitch = 2;
 
-    for (int i = 0, j = 0; i < src.rows*src.cols*2; i = i+4, j = j+6)
+    int numThreads = sysconf(_SC_NPROCESSORS_ONLN) - 1; // works for linux and osx > 10.4
+    int rgbOffset = src.rows * src.cols * 3 / numThreads;
+    int yuvOffset = src.rows * src.cols * 2 / numThreads;
+
+    #pragma omp parallel for num_threads(numThreads)
+    for (int t = 0; t < numThreads; ++t)
     {
-        // read first two bytes of yuv422 image
-        unsigned char u = src.data[i];
-        unsigned char y1 = src.data[i+1];
-        unsigned char v = src.data[i+2];
-        unsigned char y2 = src.data[i+3];
+        int tYuvOffset = t*yuvOffset;
+        int tRgbOffset = t*rgbOffset;
 
-        // do some optimization stuff
-        int c = 298*(y1 - 16);
-        int d = u - 128;
-        int d1 = 100 * d;
-        int d2 = 516 * d;
-        int e = v - 128;
-        int e1 = 409 * e;
-        int e2 = 208 * e;
-        int f1 = e1 + 128;
-        int f2 = d1 - e2 + 128;
-        int f3 = d2 + 128;
+        for (int i = 0, j = 0; i < yuvOffset; i = i+4, j = j+6)
+        {
+            // read first two bytes of yuv422 image
+            unsigned char u = src.data[i + tYuvOffset];
+            unsigned char y1 = src.data[i+1 + tYuvOffset];
+            unsigned char v = src.data[i+2 + tYuvOffset];
+            unsigned char y2 = src.data[i+3 + tYuvOffset];
 
-        // calculate first 3 RGB bytes
-        unsigned char r = clamp255<unsigned char, int>((c + f1) >> 8);
-        unsigned char g = clamp255<unsigned char, int>((c + f2) >> 8);
-        unsigned char b = clamp255<unsigned char, int>((c + f3) >> 8);
-        dest.data[j] = r;
-        dest.data[j+1] = g;
-        dest.data[j+2] = b;
+            // do some optimization stuff
+            int c = 298*(y1 - 16);
+            int d = u - 128;
+            int d1 = 100 * d;
+            int d2 = 516 * d;
+            int e = v - 128;
+            int e1 = 409 * e;
+            int e2 = 208 * e;
+            int f1 = e1 + 128;
+            int f2 = d1 - e2 + 128;
+            int f3 = d2 + 128;
 
-        // calculate second 3 RGB bytes
-        c = 298*(y2 - 16);
-        r = clamp255<int>((c + f1) >> 8);
-        g = clamp255<int>((c + f2) >> 8);
-        b = clamp255<int>((c + f3) >> 8);
-        dest.data[j+3] = r;
-        dest.data[j+4] = g;
-        dest.data[j+5] = b;
+            // calculate first 3 RGB bytes
+            unsigned char r = clamp255<unsigned char, int>((c + f1) >> 8);
+            unsigned char g = clamp255<unsigned char, int>((c + f2) >> 8);
+            unsigned char b = clamp255<unsigned char, int>((c + f3) >> 8);
+            dest.data[j+channelSwitch + tRgbOffset] = r;
+            dest.data[j+1 + tRgbOffset] = g;
+            dest.data[j-channelSwitch+2 + tRgbOffset] = b;
+
+            // calculate second 3 RGB bytes
+            c = 298*(y2 - 16);
+            r = clamp255<int>((c + f1) >> 8);
+            g = clamp255<int>((c + f2) >> 8);
+            b = clamp255<int>((c + f3) >> 8);
+            dest.data[j+channelSwitch+3 + tRgbOffset] = r;
+            dest.data[j+4 + tRgbOffset] = g;
+            dest.data[j-channelSwitch+5 + tRgbOffset] = b;
+        }
     }
+
 #ifdef _WITH_TIMER
     OKAPI_TIMER_STOP("yuv422toRGB()");
 #endif
@@ -99,12 +110,13 @@ static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest)
 
 
 
-Grasshopper::Grasshopper(int triggerSwitch)
+Grasshopper::Grasshopper(int triggerSwitch, bool BGRtoRGB)
 : // cameras
   numCameras(0),
   // source pin for hardware trigger
   GPIO_TRIGGER_SOURCE_PIN(0),
   TRIGGER_MODE_NUMBER(14),
+  BGRtoRGB(BGRtoRGB),
   manualProp(),
   error(),
   busMgr(),
@@ -513,7 +525,7 @@ cv::Mat Grasshopper::getImage(const int i)
 
     // The image is actually BGR and we have to
     // change B and R channel
-    if (channels == 3)
+    if (channels == 3 && BGRtoRGB)
     {
         cv::cvtColor(img,img,CV_BGR2RGB);
 #ifdef _WITH_TIMER
@@ -529,7 +541,7 @@ cv::Mat Grasshopper::getImage(const int i)
     if (channels == 2) 
     {
         cv::Mat imgRGB;
-        yuv422toRGB(img, imgRGB);
+        yuv422toRGB(img, imgRGB, BGRtoRGB);
 #ifdef _WITH_TIMER
         OKAPI_TIMER_STOP("getImage()");
 #endif

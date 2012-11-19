@@ -102,7 +102,7 @@ class Grasshopper
 public:
 	/** Constructor
 	*/
-	Grasshopper(int triggerSwitch = NO_TRIGGER);
+	Grasshopper(int triggerSwitch = NO_TRIGGER, bool BGRtoRGB = false);
 	
 
 #ifdef _STANDALONE
@@ -173,6 +173,7 @@ private:
 	unsigned int numCameras;
 	int GPIO_TRIGGER_SOURCE_PIN;
 	int TRIGGER_MODE_NUMBER;
+	bool BGRtoRGB;
 
 	// Camera properties and flag if they can be used in manual mode
 	std::map<PropertyType, bool> manualProp;
