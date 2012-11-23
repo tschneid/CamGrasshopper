@@ -5,111 +5,6 @@
 using namespace FlyCapture2;
 
 
-template <typename T, typename U> T clamp255(const U& value) 
-{
-    return value < 0 ? 0 : (value > 255 ? 255 : value); 
-}
-
-// not optimized, but better to read:
-// static void yuv422toRGB_niceToRead(const cv::Mat& src, cv::Mat& dest)
-// {
-//     int r,g,b;
-//     int rows = src.rows;
-//     int cols = src.cols;
-//     dest = cv::Mat(rows,cols,CV_8UC3);
-//     for (int i = 0, j = 0; i < rows*cols*2; i = i+4, j = j+6)
-//     {
-//         int u = src.data[i];
-//         int y1 = src.data[i+1];
-//         int v = src.data[i+2];
-//         int y2 = src.data[i+3];
-//         int c = y1 - 16;
-//         int d = u - 128;
-//         int e = v - 128;
-//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
-//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
-//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
-//         // RGB 1
-//         dest.data[j] = r;
-//         dest.data[j+1] = g;
-//         dest.data[j+2] = b;
-//         c = y2 - 16;
-//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
-//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
-//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
-//         // RGB 2
-//         dest.data[j+3] = r;
-//         dest.data[j+4] = g;
-//         dest.data[j+5] = b;
-//     }
-// }
-
-static void yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB = false)
-{
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: yuv422toRGB()");
-#endif
-
-    dest = cv::Mat(src.rows,src.cols,CV_8UC3);
-    char channelSwitch = 0;
-    if (BGRtoRGB) channelSwitch = 2;
-
-    int numThreads = sysconf(_SC_NPROCESSORS_ONLN) - 1; // works for linux and osx > 10.4
-    int rgbOffset = src.rows * src.cols * 3 / numThreads;
-    int yuvOffset = src.rows * src.cols * 2 / numThreads;
-
-    #pragma omp parallel for num_threads(numThreads)
-    for (int t = 0; t < numThreads; ++t)
-    {
-        int tYuvOffset = t*yuvOffset;
-        int tRgbOffset = t*rgbOffset;
-
-        for (int i = 0, j = 0; i < yuvOffset; i = i+4, j = j+6)
-        {
-            // read first two bytes of yuv422 image
-            unsigned char u = src.data[i + tYuvOffset];
-            unsigned char y1 = src.data[i+1 + tYuvOffset];
-            unsigned char v = src.data[i+2 + tYuvOffset];
-            unsigned char y2 = src.data[i+3 + tYuvOffset];
-
-            // do some optimization stuff
-            int c = 298*(y1 - 16);
-            int d = u - 128;
-            int d1 = 100 * d;
-            int d2 = 516 * d;
-            int e = v - 128;
-            int e1 = 409 * e;
-            int e2 = 208 * e;
-            int f1 = e1 + 128;
-            int f2 = d1 - e2 + 128;
-            int f3 = d2 + 128;
-
-            // calculate first 3 RGB bytes
-            unsigned char r = clamp255<unsigned char, int>((c + f1) >> 8);
-            unsigned char g = clamp255<unsigned char, int>((c + f2) >> 8);
-            unsigned char b = clamp255<unsigned char, int>((c + f3) >> 8);
-            dest.data[j+channelSwitch + tRgbOffset] = r;
-            dest.data[j+1 + tRgbOffset] = g;
-            dest.data[j-channelSwitch+2 + tRgbOffset] = b;
-
-            // calculate second 3 RGB bytes
-            c = 298*(y2 - 16);
-            r = clamp255<int>((c + f1) >> 8);
-            g = clamp255<int>((c + f2) >> 8);
-            b = clamp255<int>((c + f3) >> 8);
-            dest.data[j+channelSwitch+3 + tRgbOffset] = r;
-            dest.data[j+4 + tRgbOffset] = g;
-            dest.data[j-channelSwitch+5 + tRgbOffset] = b;
-        }
-    }
-
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB()");
-#endif
-}
-
-
-
 Grasshopper::Grasshopper(int triggerSwitch, bool BGRtoRGB)
 : // cameras
   numCameras(0),
@@ -117,6 +12,10 @@ Grasshopper::Grasshopper(int triggerSwitch, bool BGRtoRGB)
   GPIO_TRIGGER_SOURCE_PIN(0),
   TRIGGER_MODE_NUMBER(14),
   BGRtoRGB(BGRtoRGB),
+  width(0),
+  height(0),
+  encoding(""),
+  framerate(0),
   manualProp(),
   error(),
   busMgr(),
@@ -137,6 +36,9 @@ Grasshopper::Grasshopper(int triggerSwitch, bool BGRtoRGB)
   old_ts(-1),
   fps(-1),
   triggerSwitch(triggerSwitch)
+#ifdef _WITH_OPENCL
+  ,useGPU(true), clContext(), clCommandQueue(), clDevice(), clProgram(), clKernel(), dYuv(), dRgb()
+#endif
 {
     
 }
@@ -150,6 +52,15 @@ bool Grasshopper::initCameras(const int width, const int height, const std::stri
 
 bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
 {
+    getCameraParameters(videoMode, frameRate, width, height, encoding, framerate);
+#ifdef _WITH_OPENCL
+    if (!initializeOpenCL())
+    {
+        std::cout << "Failed to initialize OpenCL, falling back to CPU implementation\n";
+        useGPU = false;
+    }
+#endif
+
     error = busMgr.GetNumOfCameras(&numCameras);
     if (error != PGRERROR_OK)
     {
@@ -159,7 +70,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
     //printf( "Number of cameras detected: %u\n\n", numCameras );
     if ( numCameras < 1 )
     {
-        printf( "Insufficient number of cameras!\n" );
+        printf( "No cameras detected!\n" );
         return false;
     }
 
@@ -389,7 +300,6 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
                 printf( "SOFT_ASYNC_TRIGGER not implemented on this camera! Stopping application\n");
                 errorState = true;
             }
-            if (triggerSwitch==HARDWARE_TRIGGER) printf( "Trigger the camera by sending a trigger pulse to GPIO%d.\n", GPIO_TRIGGER_SOURCE_PIN );
         }
 
         if (errorState)
@@ -444,6 +354,10 @@ bool Grasshopper::stopCameras()
     }
     delete [] ppCameras;
     delete [] images;
+
+#ifdef _WITH_OPENCL
+    cleanupOpenCL();
+#endif
 
     return true;
 }
@@ -540,8 +454,13 @@ cv::Mat Grasshopper::getImage(const int i)
     // interesting results...)
     if (channels == 2) 
     {
-        cv::Mat imgRGB;
+        cv::Mat imgRGB(rows, cols, CV_8UC3);
+#ifdef _WITH_OPENCL
+        if (useGPU) yuv422toRGB_gpu(img, imgRGB, BGRtoRGB);
+        else yuv422toRGB(img, imgRGB, BGRtoRGB);
+#else
         yuv422toRGB(img, imgRGB, BGRtoRGB);
+#endif
 #ifdef _WITH_TIMER
         OKAPI_TIMER_STOP("grasshopper: getImage()");
 #endif
@@ -742,6 +661,45 @@ bool Grasshopper::testPropertiesForManualMode()
     return true;
 }
 
+
+void Grasshopper::printInfo()
+{
+    std::string triggerMode;
+    std::string triggerExplanation;
+    switch (triggerSwitch)
+    {
+        case 0: triggerMode = "NO TRIGGER";
+                triggerExplanation = "the cameras capture images independently and are not synchronized";
+                break;
+        case 1: triggerMode = "SOFTWARE TRIGGER";
+                triggerExplanation = "the cameras are synchronized by writing a camera internal register";
+                break;
+        case 2: triggerMode = "FIREWIRE TRIGGER";
+                triggerExplanation = "the cameras are automatically synchronized by the firewire bus (therefore they have to be on the same bus)";
+                break;
+        case 3: triggerMode = "HARDWARE TRIGGER";
+                triggerExplanation = "the cameras are synchronized by a trigger pulse on GPIO pin " + std::to_string(GPIO_TRIGGER_SOURCE_PIN);
+                break;
+        default: break;
+    }
+
+    std::cout << "*** INFORMATION ***\n"
+              << numCameras << " connected cameras found.\n"
+              << "Resolution: " << width << "x" << height << ", Encoding: " << encoding << ", Framerate: " << framerate << "\n"
+              << "Trigger: " << triggerMode << " (trigger mode " << TRIGGER_MODE_NUMBER << "), i.e., " << triggerExplanation << ".\n"
+              << "Properties to distribute: ";
+    for (std::map<PropertyType,bool>::iterator it = manualProp.begin(); it != manualProp.end(); ++it)
+    {
+        if ((*it).second) std::cout << toString((*it).first) << " ";
+    }
+    std::cout << "\n";
+#ifdef _WITH_OPENCL
+    std::cout << "The YUV422 to RGB conversion will be calculated on the GPU using OpenCL\n";
+#endif
+#ifdef _WITH_TIMER
+    std::cout << "Okapi Timer is activated\n";
+#endif
+}
 
 void Grasshopper::printCamInfo( CameraInfo* pCamInfo )
 {
@@ -1397,10 +1355,344 @@ FrameRate Grasshopper::getFrameRate(const float& fps)
     return NUM_FRAMERATES;
 }
 
+void Grasshopper::getCameraParameters(const VideoMode& vm, const FrameRate& fr, int& width, int& height, std::string& encoding, float& framerate)
+{
+    switch (vm)
+    {
+        case VIDEOMODE_FORMAT7:         width = 0; height = 0; encoding = ""; break;
+        case VIDEOMODE_160x120YUV444:   width = 160; height = 120; encoding = "yuv444"; break;
+        case VIDEOMODE_320x240YUV422:   width = 320; height = 240; encoding = "yuv422"; break;
+        case VIDEOMODE_640x480YUV422:   width = 640; height = 480; encoding = "yuv422"; break;
+        case VIDEOMODE_800x600YUV422:   width = 800; height = 600; encoding = "yuv422"; break;
+        case VIDEOMODE_1024x768YUV422:  width = 1024; height = 768; encoding = "yuv422"; break;
+        case VIDEOMODE_1280x960YUV422:  width = 1280; height = 960; encoding = "yuv422"; break;
+        case VIDEOMODE_1600x1200YUV422: width = 1600; height = 1200; encoding = "yuv422"; break;
+        case VIDEOMODE_640x480YUV411:   width = 640; height = 480; encoding = "yuv411"; break;
+        case VIDEOMODE_640x480RGB:      width = 640; height = 480; encoding = "rgb"; break;
+        case VIDEOMODE_800x600RGB:      width = 800; height = 600; encoding = "rgb"; break;
+        case VIDEOMODE_1024x768RGB:     width = 1024; height = 768; encoding = "rgb"; break;
+        case VIDEOMODE_1280x960RGB:     width = 1280; height = 960; encoding = "rgb"; break;
+        case VIDEOMODE_1600x1200RGB:    width = 1600; height = 1200; encoding = "rgb"; break;
+        case VIDEOMODE_640x480Y8:       width = 640; height = 480; encoding = "y8"; break;
+        case VIDEOMODE_800x600Y8:       width = 800; height = 600; encoding = "y8"; break;
+        case VIDEOMODE_1024x768Y8:      width = 1024; height = 768; encoding = "y8"; break;
+        case VIDEOMODE_1280x960Y8:      width = 1280; height = 960; encoding = "y8"; break;
+        case VIDEOMODE_1600x1200Y8:     width = 1600; height = 1200; encoding = "y8"; break;
+        case VIDEOMODE_640x480Y16:      width = 640; height = 480; encoding = "y16"; break;
+        case VIDEOMODE_800x600Y16:      width = 800; height = 600; encoding = "y16"; break;
+        case VIDEOMODE_1024x768Y16:     width = 1024; height = 768; encoding = "y16"; break;
+        case VIDEOMODE_1280x960Y16:     width = 1280; height = 960; encoding = "y16"; break;
+        case VIDEOMODE_1600x1200Y16:    width = 1600; height = 1200; encoding = "y16"; break;
+        default: width = 0; height = 0; encoding = ""; break;
+    }
+
+    switch (fr)
+    {
+        case FRAMERATE_3_75: framerate = 3.75; break;
+        case FRAMERATE_7_5: framerate = 7.5; break;
+        case FRAMERATE_15: framerate = 15; break;
+        case FRAMERATE_30: framerate = 30; break;
+        case FRAMERATE_60: framerate = 60; break;
+        case FRAMERATE_120: framerate = 120; break;
+        case FRAMERATE_240: framerate = 240; break;
+        default: framerate = 0; break;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// conversion
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename T, typename U> T clamp255(const U& value) 
+{
+    return value < 0 ? 0 : (value > 255 ? 255 : value); 
+}
+
+// not optimized, but better to read:
+// static void yuv422toRGB_niceToRead(const cv::Mat& src, cv::Mat& dest)
+// {
+//     int r,g,b;
+//     int rows = src.rows;
+//     int cols = src.cols;
+//     dest = cv::Mat(rows,cols,CV_8UC3);
+//     for (int i = 0, j = 0; i < rows*cols*2; i = i+4, j = j+6)
+//     {
+//         int u = src.data[i];
+//         int y1 = src.data[i+1];
+//         int v = src.data[i+2];
+//         int y2 = src.data[i+3];
+//         int c = y1 - 16;
+//         int d = u - 128;
+//         int e = v - 128;
+//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
+//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
+//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
+//         // RGB 1
+//         dest.data[j] = r;
+//         dest.data[j+1] = g;
+//         dest.data[j+2] = b;
+//         c = y2 - 16;
+//         r = clamp<int, int>((298 * c + 409 * e + 128) >> 8);
+//         g = clamp<int, int>((298 * c + 100 * d - 208 * e + 128) >> 8);
+//         b = clamp<int, int>((298 * c + 516 * d + 128) >> 8);
+//         // RGB 2
+//         dest.data[j+3] = r;
+//         dest.data[j+4] = g;
+//         dest.data[j+5] = b;
+//     }
+// }
+
+void Grasshopper::yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB)
+{
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_START("grasshopper: yuv422toRGB()");
+#endif
+
+    dest = cv::Mat(src.rows,src.cols,CV_8UC3);
+    char channelSwitch = 0;
+    if (BGRtoRGB) channelSwitch = 2;
+
+    int numThreads = sysconf(_SC_NPROCESSORS_ONLN) - 1; // works for linux and osx > 10.4
+    int rgbOffset = src.rows * src.cols * 3 / numThreads;
+    int yuvOffset = src.rows * src.cols * 2 / numThreads;
+
+    #pragma omp parallel for num_threads(numThreads)
+    for (int t = 0; t < numThreads; ++t)
+    {
+        int tYuvOffset = t*yuvOffset;
+        int tRgbOffset = t*rgbOffset;
+
+        for (int i = 0, j = 0; i < yuvOffset; i = i+4, j = j+6)
+        {
+            // read first two bytes of yuv422 image
+            unsigned char u = src.data[i + tYuvOffset];
+            unsigned char y1 = src.data[i+1 + tYuvOffset];
+            unsigned char v = src.data[i+2 + tYuvOffset];
+            unsigned char y2 = src.data[i+3 + tYuvOffset];
+
+            // do some optimization stuff
+            int c = 298*(y1 - 16);
+            int d = u - 128;
+            int d1 = 100 * d;
+            int d2 = 516 * d;
+            int e = v - 128;
+            int e1 = 409 * e;
+            int e2 = 208 * e;
+            int f1 = e1 + 128;
+            int f2 = d1 - e2 + 128;
+            int f3 = d2 + 128;
+
+            // calculate first 3 RGB bytes
+            unsigned char r = clamp255<unsigned char, int>((c + f1) >> 8);
+            unsigned char g = clamp255<unsigned char, int>((c + f2) >> 8);
+            unsigned char b = clamp255<unsigned char, int>((c + f3) >> 8);
+            dest.data[j+channelSwitch + tRgbOffset] = r;
+            dest.data[j+1 + tRgbOffset] = g;
+            dest.data[j-channelSwitch+2 + tRgbOffset] = b;
+
+            // calculate second 3 RGB bytes
+            c = 298*(y2 - 16);
+            r = clamp255<int>((c + f1) >> 8);
+            g = clamp255<int>((c + f2) >> 8);
+            b = clamp255<int>((c + f3) >> 8);
+            dest.data[j+channelSwitch+3 + tRgbOffset] = r;
+            dest.data[j+4 + tRgbOffset] = g;
+            dest.data[j-channelSwitch+5 + tRgbOffset] = b;
+        }
+    }
+
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB()");
+#endif
+}
+
+#ifdef _WITH_OPENCL
+static const char* errorToString(cl_int error)
+{
+    switch(error)
+    {
+#define CL_ERROR(x) case (x): return #x;
+            CL_ERROR(CL_SUCCESS);
+            CL_ERROR(CL_DEVICE_NOT_FOUND);
+            CL_ERROR(CL_DEVICE_NOT_AVAILABLE);
+            CL_ERROR(CL_COMPILER_NOT_AVAILABLE);
+            CL_ERROR(CL_MEM_OBJECT_ALLOCATION_FAILURE);
+            CL_ERROR(CL_OUT_OF_RESOURCES);
+            CL_ERROR(CL_OUT_OF_HOST_MEMORY);
+            CL_ERROR(CL_PROFILING_INFO_NOT_AVAILABLE);
+            CL_ERROR(CL_MEM_COPY_OVERLAP);
+            CL_ERROR(CL_IMAGE_FORMAT_MISMATCH);
+            CL_ERROR(CL_IMAGE_FORMAT_NOT_SUPPORTED);
+            CL_ERROR(CL_BUILD_PROGRAM_FAILURE);
+            CL_ERROR(CL_MAP_FAILURE);
+            CL_ERROR(CL_INVALID_VALUE);
+            CL_ERROR(CL_INVALID_DEVICE_TYPE);
+            CL_ERROR(CL_INVALID_PLATFORM);
+            CL_ERROR(CL_INVALID_DEVICE);
+            CL_ERROR(CL_INVALID_CONTEXT);
+            CL_ERROR(CL_INVALID_QUEUE_PROPERTIES);
+            CL_ERROR(CL_INVALID_COMMAND_QUEUE);
+            CL_ERROR(CL_INVALID_HOST_PTR);
+            CL_ERROR(CL_INVALID_MEM_OBJECT);
+            CL_ERROR(CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
+            CL_ERROR(CL_INVALID_IMAGE_SIZE);
+            CL_ERROR(CL_INVALID_SAMPLER);
+            CL_ERROR(CL_INVALID_BINARY);
+            CL_ERROR(CL_INVALID_BUILD_OPTIONS);
+            CL_ERROR(CL_INVALID_PROGRAM);
+            CL_ERROR(CL_INVALID_PROGRAM_EXECUTABLE);
+            CL_ERROR(CL_INVALID_KERNEL_NAME);
+            CL_ERROR(CL_INVALID_KERNEL_DEFINITION);
+            CL_ERROR(CL_INVALID_KERNEL);
+            CL_ERROR(CL_INVALID_ARG_INDEX);
+            CL_ERROR(CL_INVALID_ARG_VALUE);
+            CL_ERROR(CL_INVALID_ARG_SIZE);
+            CL_ERROR(CL_INVALID_KERNEL_ARGS);
+            CL_ERROR(CL_INVALID_WORK_DIMENSION);
+            CL_ERROR(CL_INVALID_WORK_GROUP_SIZE);
+            CL_ERROR(CL_INVALID_WORK_ITEM_SIZE);
+            CL_ERROR(CL_INVALID_GLOBAL_OFFSET);
+            CL_ERROR(CL_INVALID_EVENT_WAIT_LIST);
+            CL_ERROR(CL_INVALID_EVENT);
+            CL_ERROR(CL_INVALID_OPERATION);
+            CL_ERROR(CL_INVALID_GL_OBJECT);
+            CL_ERROR(CL_INVALID_BUFFER_SIZE);
+            CL_ERROR(CL_INVALID_MIP_LEVEL);
+#undef CL_ERROR
+    default:
+            return "Unknown error code";
+    }
+}
+
+#define CL_RETURN_FALSE(expr, errmsg) {cl_int e=(expr);if(CL_SUCCESS!=e){std::cout<<"OpenCL Error: "<<errmsg<<" ["<<errorToString(e)<<"]"<<std::endl; return false; }}
+#define CL_RETURN(expr, errmsg) {cl_int e=(expr);if(CL_SUCCESS!=e){std::cout<<"Error: "<<errmsg<<" ["<<errorToString(e)<<"]"<<std::endl; return; }}
+#define SAFE_RELEASE_KERNEL(ptr) {if(ptr){ clReleaseKernel(ptr); ptr = NULL; }}
+#define SAFE_RELEASE_PROGRAM(ptr) {if(ptr){ clReleaseProgram(ptr); ptr = NULL; }}
+#define SAFE_RELEASE_MEMOBJECT(ptr) {if(ptr){ clReleaseMemObject(ptr); ptr = NULL; }}
+
+static void clLoadProgram(const char* Path, char** pSource, size_t* SourceSize)
+{
+    FILE* pFileStream = NULL;
+    // open the OpenCL source code file
+    pFileStream = fopen(Path, "rb");
+    if(pFileStream == 0) 
+    {       
+        std::cout << "File not found: " << Path << "\n";
+        return;
+    }
+
+    //get the length of the source code
+    fseek(pFileStream, 0, SEEK_END);
+    *SourceSize = ftell(pFileStream);
+    fseek(pFileStream, 0, SEEK_SET);
+
+    *pSource = new char[*SourceSize + 1];
+    fread(*pSource, *SourceSize, 1, pFileStream);
+    fclose(pFileStream);
+    (*pSource)[*SourceSize] = '\0';
+}
+
+static void clPrintBuildLog(cl_program Program, cl_device_id Device)
+{
+    cl_build_status buildStatus;
+    clGetProgramBuildInfo(Program, Device, CL_PROGRAM_BUILD_STATUS, sizeof(cl_build_status), &buildStatus, NULL);
+    if(buildStatus == CL_SUCCESS)
+        return;
+
+    //there were some errors.
+    char* buildLog;
+    size_t logSize;
+    clGetProgramBuildInfo(Program, Device, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
+    buildLog = new char[logSize + 1];
+
+    clGetProgramBuildInfo(Program, Device, CL_PROGRAM_BUILD_LOG, logSize, buildLog, NULL);
+    buildLog[logSize] = '\0';
+
+    std::cout << "There were build errors:\n";
+    std::cout << buildLog << "\n";
+
+    delete [] buildLog;
+}
+
+
+void Grasshopper::yuv422toRGB_gpu(const cv::Mat& yuv, cv::Mat& rgb, const bool BGRtoRGB)
+{
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_START("grasshopper: yuv422toRGB_gpu()");
+#endif
+    // write image to device memory
+    CL_RETURN(clEnqueueWriteBuffer(clCommandQueue, dYuv, CL_FALSE, 0, 2 * width * height, yuv.data, 0, NULL, NULL), "Failed to enqeue write buffer");
+    // set kernel arguments
+    CL_RETURN(clSetKernelArg(clKernel, 0, sizeof(cl_mem), (void*) &dYuv), "Failed to set kernel arg 0");
+    CL_RETURN(clSetKernelArg(clKernel, 1, sizeof(cl_mem), (void*) &dRgb), "Failed to set kernel arg 1");
+    uint switchChannels = 0; // after OpenCL specification you cannot pass "bool" to the kernel
+    if (BGRtoRGB) switchChannels = 1;
+    CL_RETURN(clSetKernelArg(clKernel, 2, sizeof(uint), (void*) &switchChannels), "Failed to set kernel arg 2");
+    // define global and local work size
+    size_t globalWorkSize = width * height * 3 / 6;  //1600 * 1200 * 3 / 6
+    size_t localWorkSize = 256;
+    // start computation
+    clEnqueueNDRangeKernel(clCommandQueue, clKernel, 1, NULL, &globalWorkSize, &localWorkSize, 0, NULL, NULL);
+    // read rgb image from device memory
+    CL_RETURN(clEnqueueReadBuffer(clCommandQueue, dRgb, CL_TRUE, 0, 3 * width * height, rgb.data, 0, NULL, NULL), "Failed to read buffer from device");
+#ifdef _WITH_TIMER
+    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB_gpu()");
+#endif
+
+}
+
+bool Grasshopper::initializeOpenCL()
+{
+    cl_int clError;
+    cl_platform_id clPlatform;
+    CL_RETURN_FALSE(clGetPlatformIDs(1, &clPlatform, NULL), "Failed to get CL platform ID");
+    CL_RETURN_FALSE(clGetDeviceIDs(clPlatform, CL_DEVICE_TYPE_GPU, 1, &clDevice, NULL), "No GPU found on this machine");
+    //char deviceName[256];
+    //clGetDeviceInfo(clDevice, CL_DEVICE_NAME, 256, &deviceName, NULL);
+    //std::cout << "Device: " << deviceName << std::endl;
+    clContext = clCreateContext(0, 1, &clDevice, NULL, NULL, &clError);
+    CL_RETURN_FALSE(clError, "Failed to create OpenCL context");
+    clCommandQueue = clCreateCommandQueue(clContext, clDevice, 0, &clError);
+    CL_RETURN_FALSE(clError, "Failed to create command queue in the context");
+
+    // device resources
+    dYuv = clCreateBuffer(clContext, CL_MEM_READ_WRITE, 2 * width * height, NULL, &clError);
+    CL_RETURN_FALSE(clError, "Failed to create buffer");
+    dRgb = clCreateBuffer(clContext, CL_MEM_READ_WRITE, 3 * width * height, NULL, &clError);
+    CL_RETURN_FALSE(clError, "Failed to create buffer");
+
+    // load kernel from file
+    char* programCode = NULL;
+    size_t programSize = 0;
+    clLoadProgram("yuv422toRgb.cl", &programCode, &programSize); // load source code from file
+    clProgram = clCreateProgramWithSource(clContext, 1, (const char**) &programCode, &programSize, &clError);
+    CL_RETURN_FALSE(clError, "Failed to create program");
+    clError = clBuildProgram(clProgram, 1, &clDevice, NULL, NULL, NULL); // compile kernel
+    if(clError != CL_SUCCESS)
+    {
+        clPrintBuildLog(clProgram, clDevice);
+        return false;
+    }
+    clKernel = clCreateKernel(clProgram, "yuv422toRgb", &clError);
+    CL_RETURN_FALSE(clError, "Failed to build kernel");
+
+    return true;
+}
+
+void Grasshopper::cleanupOpenCL()
+{
+    SAFE_RELEASE_MEMOBJECT(dYuv);
+    SAFE_RELEASE_MEMOBJECT(dRgb);
+    SAFE_RELEASE_KERNEL(clKernel);
+    SAFE_RELEASE_PROGRAM(clProgram);
+    if(clCommandQueue) clReleaseCommandQueue(clCommandQueue);
+    if(clContext) clReleaseContext(clContext);
+}
+#endif // _WITH_OPENCL
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// example
+// example program
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef _STANDALONE
 int main(int argc, char** argv)
@@ -1452,9 +1744,6 @@ int main(int argc, char** argv)
 
     if (gui)
     {
-
-        //MultiSyncLibrary::MULTISYNCLIBRARY_API SyncManager sm();
-
         // Initialize okapi GUI
         okapi::GuiThread gui;
         okapi::ImageWindow* imgWin = new okapi::ImageWindow("Display");
@@ -1480,6 +1769,8 @@ int main(int argc, char** argv)
 
         // print possible video modes
         g.printVideoModes(0 /*cam index*/);
+
+        g.printInfo();
 
         // set shutter to specified milliseconds,
         // gain will be autmatically set to auto
@@ -1525,6 +1816,7 @@ int main(int argc, char** argv)
                 cv::Mat img = g.getImage(cam);
 
                 // write status in left upper image corner
+                OKAPI_TIMER_START("main(): setting deco and image");
                 okapi::ImageDeco deco(img);
                 deco.setColor(0, 0, 0);
                 deco.setThickness(3);
@@ -1539,13 +1831,9 @@ int main(int argc, char** argv)
 
                 // set images in gui
                 imgWin->setImage(okapi::strprintf("camera %i", cam), img, 0.45f);
+                OKAPI_TIMER_STOP("main(): setting deco and image");
 
             }
-
-            //if (cycleDiff < 0)
-            //    cycleDiff += 8000;
-            //printf("Difference between cycles of cam 0 and 1 = %d\n", cycleDiff);
-            //printf("\n");
 
             // end application if okapi window is closed
             if (!imgWin->getWindowState() || !widWin->getWindowState()) break;
@@ -1556,6 +1844,7 @@ int main(int argc, char** argv)
             g.getNextFrame();
         }
 
+        std::cout << "Stopping cameras... \n";
         // restore default values before stopping
         g.restoreDefaultProperties();
         // stop cameras and clean up
@@ -1570,7 +1859,7 @@ int main(int argc, char** argv)
     {
         // minimal example program
         Grasshopper g(trigger);
-        if (!g.initCameras(VIDEOMODE(1600,1200,Y8), FRAMERATE_15))
+        if (!g.initCameras(1600, 1200, "yuv422", 15))
         {
             printf("Could not initialize the cameras! Exiting... \n");
             return -1;

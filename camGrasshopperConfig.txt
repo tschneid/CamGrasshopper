@@ -39,6 +39,6 @@ resolution = 1600,1200
 encoding = yuv422
 framerate = 15
 
-trigger = 0
+trigger = 3
 masterCam = 0
-shutter = 50
+shutter = 40

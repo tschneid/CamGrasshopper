@@ -73,6 +73,13 @@
 
 #include <sys/time.h>
 
+#ifdef _WITH_OPENCL
+    #ifdef __APPLE__
+    	#include "OpenCL/opencl.h" // not tested! is this correct?
+    #else
+    	#include <CL/opencl.h>
+    #endif
+#endif
 
 #ifdef _STANDALONE
 #include <okapi/videoio/cam1394b.hpp>
@@ -88,6 +95,14 @@
 #endif
 
 using namespace FlyCapture2;
+
+
+#ifdef _WITH_OPENCL
+static const char* errorToString(cl_int);
+static void clLoadProgram(const char*, char**, size_t*);
+static void clPrintBuildLog(cl_program, cl_device_id);
+#endif
+
 
 
 class Grasshopper
@@ -117,8 +132,8 @@ public:
 	/** Initialize each connected PointGrey Grasshopper camera.
 	* \return true if the connections could be established with the specified parameters.
 	*/
-	bool initCameras(VideoMode videoMode, FrameRate frameRate);
 	bool initCameras(const int width, const int height, const std::string& encoding, const float& framerate);
+	bool initCameras(VideoMode videoMode, FrameRate frameRate);
 
 	/**  Close the connection to all cameras.
 	* \return true if the connections could be terminated correctly.
@@ -130,6 +145,7 @@ public:
 	cv::Mat getImage(const int i = 0);
 
 	// printing informations
+	void printInfo();
 	void printCamInfo( CameraInfo* pCamInfo );
 	void printVideoModes(const int i = 0);
 	void printImageMetadata(const int i = 0); // embedded data
@@ -173,6 +189,10 @@ private:
 	int TRIGGER_MODE_NUMBER;
 	bool BGRtoRGB;
 
+	int width, height;
+	std::string encoding;
+	float framerate;
+
 	// Camera properties and flag if they can be used in manual mode
 	std::map<PropertyType, bool> manualProp;
 
@@ -191,6 +211,7 @@ private:
 	static std::string toString(const PropertyType& prop);
 	static VideoMode getVideoMode(const int width, const int height, const std::string& encoding);
 	static FrameRate getFrameRate(const float& fps);
+	static void getCameraParameters(const VideoMode& vm, const FrameRate& fr, int& width, int& height, std::string& encoding, float& framerate);
 	///////////////////////////////////////////////////////////////////////////
 
 	bool embedTimestamp, embedGain, embedShutter,
@@ -201,6 +222,21 @@ private:
 
 	// trigger Mode
 	int triggerSwitch;
+
+#ifdef _WITH_OPENCL
+	bool useGPU;
+	cl_context clContext;
+    cl_command_queue clCommandQueue;
+    cl_device_id clDevice;
+    cl_program clProgram;
+    cl_kernel clKernel;
+    cl_mem dYuv, dRgb;
+    bool initializeOpenCL();
+    void cleanupOpenCL();
+    void yuv422toRGB_gpu(const cv::Mat& yuv, cv::Mat& rgb, const bool BGRtoRGB = false);
+#endif
+
+    void yuv422toRGB(const cv::Mat& yuv, cv::Mat& rgb, const bool BGRtoRGB = false);
 
 	Grasshopper(const Grasshopper&) = delete; /**< -Weffc++ */
 	Grasshopper& operator=(const Grasshopper&) = delete; /**< -Weffc++ */
