@@ -1,7 +1,9 @@
 #include "grasshopper.h"
 #include "FlyCapture2.h"
 #include <opencv2/imgproc/imgproc.hpp>
-#include "yuv422toRgb.h" // defines const char clProgramCode[]
+#ifdef _WITH_OPENCL
+    #include "yuv422toRgb.h" // defines const char clProgramCode[]
+#endif
 
 using namespace FlyCapture2;
 
