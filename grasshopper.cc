@@ -1,9 +1,9 @@
 #include "grasshopper.h"
 #include "FlyCapture2.h"
 #include <opencv2/imgproc/imgproc.hpp>
+#include "yuv422toRgb.h" // defines const char clProgramCode[]
 
 using namespace FlyCapture2;
-
 
 Grasshopper::Grasshopper(int triggerSwitch, bool BGRtoRGB)
 : // cameras
@@ -1570,28 +1570,6 @@ static const char* errorToString(cl_int error)
 #define SAFE_RELEASE_PROGRAM(ptr) {if(ptr){ clReleaseProgram(ptr); ptr = NULL; }}
 #define SAFE_RELEASE_MEMOBJECT(ptr) {if(ptr){ clReleaseMemObject(ptr); ptr = NULL; }}
 
-static void clLoadProgram(const char* Path, char** pSource, size_t* SourceSize)
-{
-    FILE* pFileStream = NULL;
-    // open the OpenCL source code file
-    pFileStream = fopen(Path, "rb");
-    if(pFileStream == 0) 
-    {       
-        std::cout << "File not found: " << Path << "\n";
-        return;
-    }
-
-    //get the length of the source code
-    fseek(pFileStream, 0, SEEK_END);
-    *SourceSize = ftell(pFileStream);
-    fseek(pFileStream, 0, SEEK_SET);
-
-    *pSource = new char[*SourceSize + 1];
-    fread(*pSource, *SourceSize, 1, pFileStream);
-    fclose(pFileStream);
-    (*pSource)[*SourceSize] = '\0';
-}
-
 static void clPrintBuildLog(cl_program Program, cl_device_id Device)
 {
     cl_build_status buildStatus;
@@ -1662,10 +1640,14 @@ bool Grasshopper::initializeOpenCL()
     CL_RETURN_FALSE(clError, "Failed to create buffer");
 
     // load kernel from file
-    char* programCode = NULL;
-    size_t programSize = 0;
-    clLoadProgram("yuv422toRgb.cl", &programCode, &programSize); // load source code from file
-    clProgram = clCreateProgramWithSource(clContext, 1, (const char**) &programCode, &programSize, &clError);
+    //char* programCode = NULL;
+    //size_t programSize = 0;
+    //clLoadProgram("yuv422toRgb.cl", &programCode, &programSize); // load source code from file
+    //std::cout << "size: " << programSize <<"\n";
+    //clProgram = clCreateProgramWithSource(clContext, 1, (const char**) &programCode, &programSize, &clError);
+    size_t programSize = sizeof(clProgramCode)/sizeof(clProgramCode[0]);
+    const char* programPointer = &clProgramCode[0];
+    clProgram = clCreateProgramWithSource(clContext, 1, (const char**) &programPointer, &programSize, &clError);
     CL_RETURN_FALSE(clError, "Failed to create program");
     clError = clBuildProgram(clProgram, 1, &clDevice, NULL, NULL, NULL); // compile kernel
     if(clError != CL_SUCCESS)
@@ -1675,7 +1657,6 @@ bool Grasshopper::initializeOpenCL()
     }
     clKernel = clCreateKernel(clProgram, "yuv422toRgb", &clError);
     CL_RETURN_FALSE(clError, "Failed to build kernel");
-
     return true;
 }
 

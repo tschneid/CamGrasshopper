@@ -1,15 +1,15 @@
 __kernel void yuv422toRgb(const __global unsigned char* yuv, __global unsigned char* rgb, const uint BGRtoRGB)
 {
     // TODO: this function is not optimized at all, e.g., add coalesced memory i/o
-    
-	int gid = get_global_id(0);
-	int i = gid * 4;
-	int j = gid * 6;
+
+    int gid = get_global_id(0);
+    int i = gid * 4;
+    int j = gid * 6;
 
     uint channelSwitch = 0;
     if (BGRtoRGB == 1) channelSwitch = 2;
 
-	int u = yuv[i];
+    int u = yuv[i];
     int y1 = yuv[i+1];
     int v = yuv[i+2];
     int y2 = yuv[i+3];
@@ -43,7 +43,7 @@ __kernel void yuv422toRgb(const __global unsigned char* yuv, __global unsigned c
     if (g > 255) g = 255;
     if (b < 0) b = 0;
     if (b > 255) b = 255;
-    
+
     // RGB 2
     rgb[j+3 + channelSwitch] = (unsigned char)r;
     rgb[j+4] = (unsigned char)g;

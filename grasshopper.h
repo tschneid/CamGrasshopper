@@ -94,16 +94,14 @@
 #include <okapi/utilities/timer.hpp>
 #endif
 
-using namespace FlyCapture2;
-
 
 #ifdef _WITH_OPENCL
 static const char* errorToString(cl_int);
-static void clLoadProgram(const char*, char**, size_t*);
+//static void clLoadProgram(const char*, char**, size_t*);
 static void clPrintBuildLog(cl_program, cl_device_id);
 #endif
 
-
+using namespace FlyCapture2;
 
 class Grasshopper
 {
