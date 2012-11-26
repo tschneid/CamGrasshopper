@@ -7,20 +7,20 @@
 // framework actually creates your module) and the framework assigns the unique
 // identifier and gives you access to its config.
 // However, you should use it to create your data structures etc.
-camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
+camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	: BVS::Module()
-	, id(id)
-	, logger(id)
+	, info(info)
+	, logger(info.id)
 	, bvs(bvs)
 	, outputs()
 	, camOrder()
-	, g(bvs.config.getValue<int>(id + ".trigger", 0), true)
+	, g(bvs.config.getValue<int>(info.conf + ".trigger", 0), true)
 	, numCameras(0)
 	, resolution()
-	, encoding(bvs.config.getValue<std::string>(id + ".encoding", "Y8"))
-	, framerate(bvs.config.getValue<float>(id + ".framerate", 15))
-	, masterCam(bvs.config.getValue<int>(id + ".masterCam", -1))
-	, shutter(bvs.config.getValue<int>(id + ".shutter", -1))
+	, encoding(bvs.config.getValue<std::string>(info.conf + ".encoding", "Y8"))
+	, framerate(bvs.config.getValue<float>(info.conf + ".framerate", 15))
+	, masterCam(bvs.config.getValue<int>(info.conf + ".masterCam", -1))
+	, shutter(bvs.config.getValue<int>(info.conf + ".shutter", -1))
 	, triggerRunning(false)
 	, triggerExit(false)
 	, mutex()
@@ -28,7 +28,7 @@ camGrasshopper::camGrasshopper(const std::string id, const BVS::Info& bvs)
 	, triggerCond()
 	, trigger()
 {
-	bvs.config.getValue<int>(id + ".resolution", resolution);
+	bvs.config.getValue<int>(info.conf + ".resolution", resolution);
 	if (resolution.size() != 2) resolution = {1024, 768};
 
 	g.initCameras(resolution[0], resolution[1], encoding, framerate);

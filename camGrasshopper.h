@@ -29,7 +29,7 @@ class camGrasshopper : public BVS::Module
 		 * @param[in] id Your modules unique identifier, will be set by framework.
 		 * @param[in] bvs Reference to framework info for e.g. config option retrieval.
 		 */
-		camGrasshopper(const std::string id, const BVS::Info& bvs);
+		camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs);
 
 		/** Your module destructor. */
 		~camGrasshopper();
@@ -47,7 +47,7 @@ class camGrasshopper : public BVS::Module
 		BVS::Status debugDisplay();
 
 	private:
-		const std::string id; /**< Your unique module id, set by framework. */
+		const BVS::ModuleInfo info;
 
 		/** Your logger instance.
 		 * @see Logger
