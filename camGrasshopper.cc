@@ -21,6 +21,7 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	, framerate(bvs.config.getValue<float>(info.conf + ".framerate", 15))
 	, masterCam(bvs.config.getValue<int>(info.conf + ".masterCam", -1))
 	, shutter(bvs.config.getValue<int>(info.conf + ".shutter", -1))
+	, triggerThread(bvs.config.getValue<bool>(info.conf + ".triggerThread", true))
 	, triggerRunning(false)
 	, triggerExit(false)
 	, mutex()
@@ -32,7 +33,6 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	if (resolution.size() != 2) resolution = {1024, 768};
 
 	g.initCameras(resolution[0], resolution[1], encoding, framerate);
-
 
 	//g.printVideoModes(0);
 	if (shutter > 0)
@@ -51,8 +51,11 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	for (unsigned int i=0; i<numCameras; i++) remap[g.getCameraSerialNumber(i)]=i;
 	for (auto& it: remap) camOrder.push_back(it.second);
 
-	triggerRunning = true;
-	trigger = std::thread(&camGrasshopper::triggerCameras, this);
+	if (triggerThread)
+	{
+		triggerRunning = true;
+		trigger = std::thread(&camGrasshopper::startTriggerThread, this);
+	}
 }
 
 
@@ -61,11 +64,14 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 // See the constructor for more info.
 camGrasshopper::~camGrasshopper()
 {
-	triggerExit = true;
-	triggerRunning = true;
-	masterLock.unlock();
-	triggerCond.notify_one();
-	if (trigger.joinable()) trigger.join();
+	if (triggerThread)
+	{
+		triggerExit = true;
+		triggerRunning = true;
+		masterLock.unlock();
+		triggerCond.notify_one();
+		if (trigger.joinable()) trigger.join();
+	}
 
 	g.restoreDefaultProperties();
     g.stopCameras();
@@ -76,7 +82,8 @@ camGrasshopper::~camGrasshopper()
 // Put all your work here.
 BVS::Status camGrasshopper::execute()
 {
-	triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
+	if (triggerThread) triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
+	else triggerCameras();
 
 	cv::Mat img;
 	for (unsigned int i = 0; i < numCameras; ++i)
@@ -85,8 +92,11 @@ BVS::Status camGrasshopper::execute()
 		outputs[i]->send(img);
 	}
 
-	triggerRunning = true;
-	triggerCond.notify_one();
+	if (triggerThread)
+	{
+		triggerRunning = true;
+		triggerCond.notify_one();
+	}
 
 	return BVS::Status::OK;
 }
@@ -95,13 +105,20 @@ BVS::Status camGrasshopper::execute()
 
 void camGrasshopper::triggerCameras()
 {
+	if (masterCam >= 0) g.distributeCamProperties(masterCam);
+	g.getNextFrame();
+}
+
+
+
+void camGrasshopper::startTriggerThread()
+{
 	BVS::nameThisThread("camGH.trigger");
 	std::unique_lock<std::mutex> triggerLock(mutex);
 	while (!triggerExit)
 	{
 		triggerCond.wait(triggerLock, [&](){ return triggerRunning; });
-		if (masterCam >= 0) g.distributeCamProperties(masterCam);
-		g.getNextFrame();
+		triggerCameras();
 		triggerRunning = false;
 		triggerCond.notify_one();
 	}

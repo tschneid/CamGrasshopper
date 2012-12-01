@@ -59,11 +59,8 @@ class camGrasshopper : public BVS::Module
 		 */
 		const BVS::Info& bvs;
 
-		/** Example Connector used to retrieve/send data from/to other modules.
-		 * @see Connector
-		 */
-
 		void triggerCameras();
+		void startTriggerThread();
 
 		std::vector<BVS::Connector<cv::Mat>* > outputs;
 		std::vector<int> camOrder;
@@ -82,6 +79,7 @@ class camGrasshopper : public BVS::Module
 		int shutter; /**< Define shutter speed for higher frame rate. */
 
 
+		bool triggerThread;
 		bool triggerRunning;
 		bool triggerExit;
 		std::mutex mutex;
