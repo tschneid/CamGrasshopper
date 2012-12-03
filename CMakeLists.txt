@@ -9,7 +9,7 @@ set (CL_KERNEL_HEADER "${CL_KERNEL_HEADER}\\0\";") # add ending character and se
 set (CL_KERNEL_HEADER "\#ifndef _YUV422_TO_RGB_H_\n\#define _YUV422_TO_RGB_H_\n${CL_KERNEL_HEADER}\n\#endif") # add preprocessor directives
 file(WRITE "yuv422toRgb.h" "${CL_KERNEL_HEADER}")
 
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/camGrasshopperConfig.txt ${CMAKE_BINARY_DIR}/bin/camGrasshopperConfig.txt)
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/camGrasshopper.conf ${CMAKE_BINARY_DIR}/bin/camGrasshopper.conf)
 
 add_library(camGrasshopper MODULE camGrasshopper.cc grasshopper.cc)
 set(FLYCAPTURE_INCLUDE_DIR "/usr/include/flycapture")
