@@ -69,7 +69,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
         printError( error );
         return false;
     }
-    //printf( "Number of cameras detected: %u\n\n", numCameras );
+
     if ( numCameras < 1 )
     {
         printf( "No cameras detected!\n" );
@@ -114,8 +114,6 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             printError( error );
             errorState = true;
         }
-        //std::cout << i <<":\n";
-        // printCamInfo(&camInfo); 
 
         // Set all cameras to a specific mode and frame rate so they
         // can be synchronized.
@@ -155,7 +153,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
     if (errorState)
         return false;
 
-    // test if propertiers can be written manually
+    // Test if propertiers can be written manually.
     testPropertiesForManualMode();
 
 
@@ -232,18 +230,9 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
                 errorState = true;
             }
 
-            // Set camera to trigger mode 0
-            // Trigger_Mode_0 (“Standard External Trigger Mode”)
-            // Trigger_Mode_0 is best described as the standard external trigger mode. When the camera is put
-            // into Trigger_Mode_0, the camera starts integration of the incoming light from external trigger input
-            // falling/rising edge. The SHUTTER register describes integration time. No parameter is required. The
-            // camera can be triggered in this mode using the GPIO pins as external trigger or the SOFTWARE_
-            // TRIGGER (62Ch) register.
 
             // It is not possible to trigger the camera the full frame rate using Mode_0;
             // however, this is possible using Trigger_Mode_14.
-
-
             triggerMode.onOff = true;
             triggerMode.mode = TRIGGER_MODE_NUMBER;
             triggerMode.parameter = 0;
@@ -280,7 +269,7 @@ bool Grasshopper::initCameras(VideoMode videoMode, FrameRate frameRate)
             // and WaitForBufferEvent() will wait for an image before
             // timing out and returning. 
             config.grabTimeout = 5000;
-            // config.grabMode = BUFFER_FRAMES; // tried for a higher frame rate... not working
+            // config.grabMode = BUFFER_FRAMES; // tried this to get a higher frame rate... not working
             // Set the camera configuration
             error = ppCameras[i]->SetConfiguration( &config );
             if (error != PGRERROR_OK)
@@ -336,7 +325,6 @@ bool Grasshopper::stopCameras()
             if (error != PGRERROR_OK)
             {
                 printError( error );
-                //exit(-1);
             }
             triggerMode.onOff = false;
 
@@ -344,7 +332,6 @@ bool Grasshopper::stopCameras()
             if (error != PGRERROR_OK)
             {
                 printError( error );
-                //exit(-1);
             }
         }
     }
@@ -1674,9 +1661,11 @@ void Grasshopper::cleanupOpenCL()
 #endif // _WITH_OPENCL
 
 
+
 ///////////////////////////////////////////////////////////////////////////////
-// example program
+// Example Program
 ///////////////////////////////////////////////////////////////////////////////
+
 #ifdef _STANDALONE
 int main(int argc, char** argv)
 {
@@ -1684,6 +1673,7 @@ int main(int argc, char** argv)
     bool saveImages = false; // only works without gui
     int trigger = 0; 
 
+    // get command line arguments
     for(int i = 0; i < argc; i++)
     {
         std::string arg = argv[i];
@@ -1694,35 +1684,6 @@ int main(int argc, char** argv)
         if (arg.compare("--trigger") == 0)
             trigger = atoi(argv[i+1]);
     }       
-
-    // The time from a software trigger to the start of the shutter consists of
-    // 1. Register write request to register write response (approx. 49.85us)
-    // 2. Trigger latency (approx. 6us)
-    // 3. Shutter time
-    // 4. Time until data transfer (appox. 1ms)
-    // 5. Data transfer (approx. 30ms)
-
-    // Time per call of RetrieveBuffer() equals for 1 or 2 cameras.
-    // ==> Image acquisition limits the frame rate.
-    // How can the image acquisition get faster?
-    // ==> Shutter set to 20 ms
-    // ==> Gain set to 1 dB
-
-    // Maximum Frame Rate in External Trigger Mode:
-    // Max_Frame_Rate_Trigger = 1 / ( Shutter + ( 1 / Max_Frame_Rate_Free_Running ) )
-    // ( = 1 / (0.002 + (1 / 15)) = 14.56 with Shutter=20ms )
-
-    // RetrieveBuffer() needs 95.971 ms / call
-    // shutter = 20 ms
-    // register write + latenxy = 56 us = 0.056 ms
-    // time until transfer = 1 ms
-    // => 96 ms - 21 ms = 75 ms data transfer?
-
-    // 30 fps @ 1024x768 Y8 ?
-    // 15 fps @ 1600x1200 YUV422
-
-    // FPS = 1 / (Packets Per Frame * 125us)
-    // Packets Per Frame = ImageSize * BytesPerPixel / BytesPerPacket  (estimate)
 
 
     if (gui)
@@ -1741,7 +1702,7 @@ int main(int argc, char** argv)
 
         // Initialize cameras
         Grasshopper g(trigger);
-        g.resetBus(); // does not change anything...
+        g.resetBus(); // seems to not change anything...
 
 
         if (!g.initCameras(1600,1200,"yuv422",15))
@@ -1759,33 +1720,18 @@ int main(int argc, char** argv)
         // gain will be autmatically set to auto
         g.setShutter(40);
 
-        // get number of cameras
+        // get number of connected cameras
         int numCameras = g.getNumCameras();
 
-        // set cam 0 to master and distribute its properties (shutter, gain, etc.)
+        // set cam 0 to master-cam and distribute its properties (shutter, gain, etc.)
         g.distributeCamProperties(0);
 
         // trigger and catch frames
         g.getNextFrame();
 
         int counter = 0;
-        // main loop
         for (;;)
         {
-            /*counter++;
-            if (counter == 50)
-            {
-                g.setROI(0,0,1000,1000,1);
-            }
-            if (counter == 100)
-            {
-                g.setROI(400,400, 2000, 2000, 1);
-            }
-            if (counter == 150)
-            {
-                g.setROI(20,30,100,400,1);
-            }*/
-
             // g.saveImages(i); // this would save them to disk
 
             // calculate frames per second
@@ -1795,7 +1741,7 @@ int main(int argc, char** argv)
 
             for (int cam = 0; cam < numCameras; ++cam)
             {
-                //Image img = g.getFlyCapImage(cam);
+                // get image from camera 0 ... n
                 cv::Mat img = g.getImage(cam);
 
                 // write status in left upper image corner
@@ -1821,15 +1767,18 @@ int main(int argc, char** argv)
             // end application if okapi window is closed
             if (!imgWin->getWindowState() || !widWin->getWindowState()) break;
 
-            // set cam 0 to master and distribute its properties (shutter, gain, etc.)
+            // set cam 0 to master-cam and distribute its properties (shutter, gain, etc.)
             g.distributeCamProperties(0);
+
             // trigger and catch frames
             g.getNextFrame();
         }
 
         std::cout << "Stopping cameras... \n";
+
         // restore default values before stopping
         g.restoreDefaultProperties();
+
         // stop cameras and clean up
         g.stopCameras();
 
@@ -1840,14 +1789,14 @@ int main(int argc, char** argv)
     }
     else
     {
-        // minimal example program
+        // No GUI example
         Grasshopper g(trigger);
         if (!g.initCameras(1600, 1200, "yuv422", 15))
         {
             printf("Could not initialize the cameras! Exiting... \n");
             return -1;
         }
-        g.printVideoModes(0 /*cam index*/);
+        g.printVideoModes(0);
         g.setShutter(20);
 
         int numCameras = g.getNumCameras();
