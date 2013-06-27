@@ -2,6 +2,7 @@ CamGrasshopper ( + BVS Module )
 ===============================
 
 Simple wrapper for FlyCapture2 to control PointGrey Grasshopper Cameras.
+
 ----
 ## Dependencies
 * [PointGrey FlyCapture2 SDK](http://www.ptgrey.com/support/downloads/)
