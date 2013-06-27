@@ -2,11 +2,6 @@
 #include "grasshopper.h"
 #include <thread>
 
-// This is your module's constructor.
-// Please do not change its signature as it is called by the framework (so the
-// framework actually creates your module) and the framework assigns the unique
-// identifier and gives you access to its config.
-// However, you should use it to create your data structures etc.
 camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	: BVS::Module()
 	, info(info)
@@ -32,14 +27,19 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 	bvs.config.getValue<int>(info.conf + ".resolution", resolution);
 	if (resolution.size() != 2) resolution = {1024, 768};
 
-	g.initCameras(resolution[0], resolution[1], encoding, framerate);
+	if (!g.initCameras(resolution[0], resolution[1], encoding, framerate))
+		LOG(1, "Something went wrong while initializing the cameras!");
 
 	//g.printVideoModes(0);
 	if (shutter > 0)
 	{
 		g.setShutter(shutter);
 	}
+	
 	numCameras = g.getNumCameras();
+	if (numCameras == 0)
+		LOG(1, "No cameras detected!");
+
 
 	for (unsigned int i = 0; i < numCameras; ++i)
 	{
@@ -60,8 +60,6 @@ camGrasshopper::camGrasshopper(BVS::ModuleInfo info, const BVS::Info& bvs)
 
 
 
-// This is your module's destructor.
-// See the constructor for more info.
 camGrasshopper::~camGrasshopper()
 {
 	if (triggerThread)
@@ -79,7 +77,6 @@ camGrasshopper::~camGrasshopper()
 
 
 
-// Put all your work here.
 BVS::Status camGrasshopper::execute()
 {
 	if (triggerThread) triggerCond.wait(masterLock, [&](){ return !triggerRunning; });
@@ -126,10 +123,7 @@ void camGrasshopper::startTriggerThread()
 }
 
 
-
-// UNUSED
 BVS::Status camGrasshopper::debugDisplay()
 {
 	return BVS::Status::OK;
 }
-

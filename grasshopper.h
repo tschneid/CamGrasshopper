@@ -1,13 +1,8 @@
 #ifndef _GRASSHOPPER_HPP_
 #define _GRASSHOPPER_HPP_
 
-
-// Okapi Timer for benchmarking and debugging
-//#define _WITH_TIMER
-
-// main() function with minimal example program (using okapi gui)
+// main() function with minimal example program (using OpenCV highgui)
 //#define _STANDALONE
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // Triggering Info
@@ -58,7 +53,6 @@
 // VIDEOMODE_FORMAT7
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include "FlyCapture2.h"
 
 #include <vector>
@@ -69,7 +63,10 @@
 #include <algorithm>
 
 #include <opencv2/core/core.hpp>
-#include <dc1394/dc1394.h>
+#ifdef _STANDALONE
+	#include <opencv2/highgui/highgui.hpp>
+#endif
+//#include <dc1394/dc1394.h>
 
 #include <sys/time.h>
 
@@ -80,20 +77,6 @@
     	#include <CL/opencl.h>
     #endif
 #endif
-
-#ifdef _STANDALONE
-#include <okapi/videoio/cam1394b.hpp>
-#include <okapi/gui/guithread.hpp>
-#include <okapi/gui/imagewindow.hpp>
-#include <okapi/gui/widgetwindow.hpp>
-#include <okapi/utilities/string.hpp>
-#include <okapi/utilities/imagedeco.hpp>
-#endif
-
-#ifdef _WITH_TIMER
-#include <okapi/utilities/timer.hpp>
-#endif
-
 
 #ifdef _WITH_OPENCL
 static const char* errorToString(cl_int);
@@ -111,31 +94,13 @@ public:
 	static const int FIREWIRE_TRIGGER = 2;
 	static const int HARDWARE_TRIGGER = 3;
 
-	/** Constructor
-	*/
 	Grasshopper(int triggerSwitch = NO_TRIGGER, bool BGRtoRGB = false);
-	
 
-#ifdef _STANDALONE
-	///////////////////////////////////////////////////////////////////////////
-	// okapi using functions
-	void resetBus();
-	void printBusInfo();
-	///////////////////////////////////////////////////////////////////////////
-#endif
-
-	///////////////////////////////////////////////////////////////////////////
-	// flycapture using public functions
-
-	/** Initialize each connected PointGrey Grasshopper camera.
-	* \return true if the connections could be established with the specified parameters.
-	*/
+	// Initialize each connected PointGrey Grasshopper camera.
 	bool initCameras(const int width, const int height, const std::string& encoding, const float& framerate);
 	bool initCameras(VideoMode videoMode, FrameRate frameRate);
 
-	/**  Close the connection to all cameras.
-	* \return true if the connections could be terminated correctly.
-	*/
+	// Close the connection to all cameras.
 	bool stopCameras();
 
 	// triggering and retrieving frames
@@ -144,7 +109,7 @@ public:
 
 	// printing informations
 	void printInfo();
-	void printCamInfo( CameraInfo* pCamInfo );
+	void printCamInfo(CameraInfo* pCamInfo);
 	void printVideoModes(const int i = 0);
 	void printImageMetadata(const int i = 0); // embedded data
 
@@ -155,7 +120,7 @@ public:
 	bool testPropertiesForManualMode();
 	std::string getProperty(const PropertyType& propType, const int i); // Shutter, Gain, etc.
 
-	// region of interest
+	// region of interest -- experimental!
 	// (Changing the ROI currently takes about 1 second, so it's much to slow to do it
 	// in each iteration. This is because you have to stop the cameras, set the settings,
 	// and start them again.)
@@ -168,8 +133,6 @@ public:
 	bool saveImages(const int imgNum = 0); // very primitive
 	Image getFlyCapImage(const int i = 0);
 	int getCameraSerialNumber(int index);
-
-	///////////////////////////////////////////////////////////////////////////
 
 	// display frames per second
 	double tickFPS(); // Use this one time in your main loop
@@ -194,8 +157,6 @@ private:
 	// Camera properties and flag if they can be used in manual mode
 	std::map<PropertyType, bool> manualProp;
 
-	///////////////////////////////////////////////////////////////////////////
-	// flycapture using private functions
 	Error error;
     BusManager busMgr;
     Camera** ppCameras;
@@ -210,15 +171,17 @@ private:
 	static VideoMode getVideoMode(const int width, const int height, const std::string& encoding);
 	static FrameRate getFrameRate(const float& fps);
 	static void getCameraParameters(const VideoMode& vm, const FrameRate& fr, int& width, int& height, std::string& encoding, float& framerate);
-	///////////////////////////////////////////////////////////////////////////
 
+	// embed information in the first few pixels
 	bool embedTimestamp, embedGain, embedShutter,
 		 embedBrightness, embedExposure, embedWhiteBalance,
 		 embedFrameCounter, embedStrobePattern,
     	 embedGPIOPinState, embedROIPosition;
+
+   	// timestamp calculation
     double old_ts, fps;
 
-	// trigger Mode
+	// trigger mode
 	int triggerSwitch;
 
 #ifdef _WITH_OPENCL

@@ -358,46 +358,23 @@ bool Grasshopper::getNextFrame()
     if (triggerSwitch==SOFTWARE_TRIGGER)
     {
         // Fire software trigger
-#ifdef _WITH_TIMER
-        OKAPI_TIMER_START("grasshopper: FireSoftwareTrigger()");
-#endif
         bool retVal = FireSoftwareTrigger(ppCameras);
-#ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("grasshopper: FireSoftwareTrigger()");
-#endif
-        /* for (unsigned int i = 0; i < numCameras; ++i)
-           {
-           retVal &= FireSoftwareTrigger( ppCameras[i] );
-           }*/
         if ( !retVal )
         {
             printf("Error firing software trigger!\n");
             return false;
         }
     }
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: RetrieveBuffer() of all cameras");
-#endif
+
     for (unsigned int i = 0; i < numCameras; ++i)
     {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: RetrieveBuffer() of one cameras");
-#endif
         // Write the frame in images
         error = ppCameras[i]->RetrieveBuffer( &images[i] );
         if (error != PGRERROR_OK)
         {
             printError( error );
         }
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: RetrieveBuffer() of one cameras");
-#endif
-
     }
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: RetrieveBuffer() of all cameras");
-#endif
-
     return true;
 }
 
@@ -411,10 +388,6 @@ Image Grasshopper::getFlyCapImage(const int i)
 
 cv::Mat Grasshopper::getImage(const int i)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: getImage()");
-#endif
-
     unsigned int rows, cols;
     rows = images[i].GetRows();
     cols = images[i].GetCols();
@@ -431,9 +404,6 @@ cv::Mat Grasshopper::getImage(const int i)
     if (channels == 3 && BGRtoRGB)
     {
         cv::cvtColor(img,img,CV_BGR2RGB);
-#ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("grasshopper: getImage()");
-#endif
         return img;
     }
 
@@ -450,15 +420,9 @@ cv::Mat Grasshopper::getImage(const int i)
 #else
         yuv422toRGB(img, imgRGB, BGRtoRGB);
 #endif
-#ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("grasshopper: getImage()");
-#endif
         return imgRGB;
     }
-    
-#ifdef _WITH_TIMER
-        OKAPI_TIMER_STOP("grasshopper: getImage()");
-#endif
+
     // The image is Y8 (grayscale)
     return img;
 }
@@ -467,10 +431,6 @@ cv::Mat Grasshopper::getImage(const int i)
 
 bool Grasshopper::distributeCamProperties(const unsigned int master)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: distributeCamProperties()");
-#endif
-    
     for (std::map<PropertyType,bool>::iterator it = manualProp.begin(); it != manualProp.end(); ++it)
     {
         if ((*it).second) // flag if property can be set manually
@@ -522,19 +482,12 @@ bool Grasshopper::distributeCamProperties(const unsigned int master)
         }
     }
 
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: distributeCamProperties()");
-#endif
-
     return true;
 }
 
 
 bool Grasshopper::restoreDefaultProperties(const int i)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: restoreDefaultProperties()");
-#endif
     if (i < 0)
     {
         // restore defaults of each connected cam
@@ -563,9 +516,6 @@ bool Grasshopper::restoreDefaultProperties(const int i)
             return false;
         }
     }
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: restoreDefaultProperties()");
-#endif
     return true;
 }
 
@@ -673,7 +623,7 @@ void Grasshopper::printInfo()
     }
 
     std::cout << "*** INFORMATION ***\n"
-              << numCameras << " connected cameras found.\n"
+              << numCameras << " connected camera(s) found.\n"
               << "Resolution: " << width << "x" << height << ", Encoding: " << encoding << ", Framerate: " << framerate << "\n"
               << "Trigger: " << triggerMode << " (trigger mode " << TRIGGER_MODE_NUMBER << "), i.e., " << triggerExplanation << ".\n"
               << "Properties to distribute: ";
@@ -684,9 +634,6 @@ void Grasshopper::printInfo()
     std::cout << "\n";
 #ifdef _WITH_OPENCL
     std::cout << "The YUV422 to RGB conversion will be calculated on the GPU using OpenCL\n";
-#endif
-#ifdef _WITH_TIMER
-    std::cout << "Okapi Timer is activated\n";
 #endif
 }
 
@@ -810,21 +757,7 @@ std::string Grasshopper::getProcessedFPSString()
 
 void Grasshopper::printImageMetadata(const int i)
 {
-    // timestamp, shutter, brightness, exposure, whiteBalance is embedded
     ImageMetadata meta = images[i].GetMetadata();
-    
-    /*union _absValueConversion
-    {
-        unsigned long ulVal;
-        float fVal;
-    } absValueConversion;
-
-    absValueConversion.ulVal = meta.embeddedShutter;
-    float f = absValueConversion.fVal;
-    float* p_f = reinterpret_cast<float*>(&shutter);
-
-    std::cout << f << " " << *p_f <<"\n";*/
-
     std::stringstream ss;
     if (embedTimestamp)     ss << "Timestamp: " << meta.embeddedTimeStamp << "\n";
     if (embedGain)          ss << "Gain: " << meta.embeddedGain << "\n";
@@ -887,10 +820,6 @@ bool Grasshopper::setShutter(const int milliseconds)
 
 std::string Grasshopper::getProperty(const PropertyType& propType, const int i)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: getProperty()");
-#endif
-
     Property prop;
     prop.type = propType;
 
@@ -945,9 +874,6 @@ std::string Grasshopper::getProperty(const PropertyType& propType, const int i)
         return "";
     }
     
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: getProperty()");
-#endif
     return propString.str();
 }
 
@@ -963,42 +889,6 @@ int Grasshopper::getCameraSerialNumber(int index)
 	}
 	return camInfo.serialNumber;
 }
-
-
-
-#ifdef _STANDALONE
-void Grasshopper::resetBus()
-{
-    // reset all cameras/buses for a clean start
-    okapi::Cam1394b::dc1394ext_reset_bus();
-}
-
-
-void Grasshopper::printBusInfo()
-{
-    // print all connected cameras
-    okapi::Cam1394b::printConnectedCams();
-    std::cout << "\n";
-    
-    // print the unique IDs of all connected cameras
-    std::vector<okapi::Cam1394b::unique_cam_id_t> uids;
-    uids = okapi::Cam1394b::getConnectedCamIDs();
-    std::cout << "Unique IDs of connected cameras: ";
-    for (size_t i = 0; i < uids.size(); i++)
-        std::cout << uids[i] << " ";
-    std::cout << "\n";
-    
-    // get the unique IDs of all connected cameras with the given vendorname/modelname
-    std::string vendorname = "*";
-    
-    std::string modelname = "Grasshopper GRAS-50S5C"; // Grasshopper 2, Model# GS2-FW-14S5M/C-C
-    uids = okapi::Cam1394b::getConnectedCamIDs(vendorname,modelname);
-    std::cout << "Unique IDs of connected cameras by vendor=" << vendorname << "/model=" << modelname << ": ";
-    for (size_t i = 0; i < uids.size(); i++)
-        std::cout << uids[i] << " ";
-    std::cout << std::endl;
-}
-#endif
 
 
 bool Grasshopper::saveImages(const int imgNum)
@@ -1026,10 +916,6 @@ bool Grasshopper::setROI(const int x, const int y, const int width, const int he
 
 bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: setROI()");
-#endif
-
     // VideoMode currVideoMode;
     // FrameRate currFrameRate;
     // Format7ImageSettings currFmt7Settings;
@@ -1129,15 +1015,7 @@ bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
         return false;
     }
 
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: setROI(): stop capture");
-#endif
-
     ppCameras[cam]->StopCapture(); // @TODO: This takes really long! (unlike in flycap GUI)
-
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: setROI(): stop capture");
-#endif
 
     //std::cout << "==== bytesPerPacket ====\n"
     //          << "recommended: " << fmt7PacketInfo.recommendedBytesPerPacket << "\n"
@@ -1152,12 +1030,6 @@ bool Grasshopper::setROI(const cv::Rect& _roi, const unsigned int cam)
     }
 
     ppCameras[cam]->StartCapture();
-
-
-
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: setROI()");
-#endif
     return true;
 }
 
@@ -1433,9 +1305,6 @@ template <typename T, typename U> T clamp255(const U& value)
 
 void Grasshopper::yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRtoRGB)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: yuv422toRGB()");
-#endif
 
     dest = cv::Mat(src.rows,src.cols,CV_8UC3);
     char channelSwitch = 0;
@@ -1489,10 +1358,6 @@ void Grasshopper::yuv422toRGB(const cv::Mat& src, cv::Mat& dest, const bool BGRt
             dest.data[j-channelSwitch+5 + tRgbOffset] = b;
         }
     }
-
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB()");
-#endif
 }
 
 #ifdef _WITH_OPENCL
@@ -1584,9 +1449,6 @@ static void clPrintBuildLog(cl_program Program, cl_device_id Device)
 
 void Grasshopper::yuv422toRGB_gpu(const cv::Mat& yuv, cv::Mat& rgb, const bool BGRtoRGB)
 {
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_START("grasshopper: yuv422toRGB_gpu()");
-#endif
     // write image to device memory
     CL_RETURN(clEnqueueWriteBuffer(clCommandQueue, dYuv, CL_FALSE, 0, 2 * width * height, yuv.data, 0, NULL, NULL), "Failed to enqeue write buffer");
     // set kernel arguments
@@ -1602,10 +1464,6 @@ void Grasshopper::yuv422toRGB_gpu(const cv::Mat& yuv, cv::Mat& rgb, const bool B
     clEnqueueNDRangeKernel(clCommandQueue, clKernel, 1, NULL, &globalWorkSize, &localWorkSize, 0, NULL, NULL);
     // read rgb image from device memory
     CL_RETURN(clEnqueueReadBuffer(clCommandQueue, dRgb, CL_TRUE, 0, 3 * width * height, rgb.data, 0, NULL, NULL), "Failed to read buffer from device");
-#ifdef _WITH_TIMER
-    OKAPI_TIMER_STOP("grasshopper: yuv422toRGB_gpu()");
-#endif
-
 }
 
 bool Grasshopper::initializeOpenCL()
@@ -1688,22 +1546,8 @@ int main(int argc, char** argv)
 
     if (gui)
     {
-        // Initialize okapi GUI
-        okapi::GuiThread gui;
-        okapi::ImageWindow* imgWin = new okapi::ImageWindow("Display");
-        gui.addClient(imgWin);
-        okapi::WidgetWindow* widWin = new okapi::WidgetWindow("Settings");
-        gui.addClient(widWin);
-        gui.start();
-
-        imgWin->resize(0,0,1500,700);
-        widWin->setButton("Show Shutter", false);
-        widWin->setButton("Show Gain", false);
-
         // Initialize cameras
-        Grasshopper g(trigger);
-        g.resetBus(); // seems to not change anything...
-
+        Grasshopper g(trigger, true);
 
         if (!g.initCameras(1600,1200,"yuv422",15))
         {
@@ -1729,7 +1573,11 @@ int main(int argc, char** argv)
         // trigger and catch frames
         g.getNextFrame();
 
-        int counter = 0;
+        for (int cam = 0; cam < numCameras; ++cam)
+            cv::namedWindow("Display"+std::to_string(cam));
+
+        cv::startWindowThread();
+
         for (;;)
         {
             // g.saveImages(i); // this would save them to disk
@@ -1744,28 +1592,16 @@ int main(int argc, char** argv)
                 // get image from camera 0 ... n
                 cv::Mat img = g.getImage(cam);
 
-                // write status in left upper image corner
-                OKAPI_TIMER_START("main(): setting deco and image");
-                okapi::ImageDeco deco(img);
-                deco.setColor(0, 0, 0);
-                deco.setThickness(3);
-                deco.setTextFont(40);
-                std::stringstream status; // status string shown inside the image
-                status << fps;
-                if (widWin->getButton("Show Shutter"))
-                    status << g.getProperty(SHUTTER, cam) << "\n";
-                if (widWin->getButton("Show Gain"))
-                    status << g.getProperty(GAIN, cam) << "\n";
-                deco.drawText(status.str(), 10, 50);
+                // display image
+                cv::putText(img, fps, cv::Point(10, 30),
+                        CV_FONT_HERSHEY_SIMPLEX, 1.0f, cvScalar(0, 0, 255), 2);
+                // you could also print something like
+                // g.getProperty(SHUTTER, cam)
+                // g.getProperty(GAIN, cam)
 
-                // set images in gui
-                imgWin->setImage(okapi::strprintf("camera %i", cam), img, 0.45f);
-                OKAPI_TIMER_STOP("main(): setting deco and image");
-
+                // set images in GUI
+                cv::imshow("Display"+std::to_string(cam), img);
             }
-
-            // end application if okapi window is closed
-            if (!imgWin->getWindowState() || !widWin->getWindowState()) break;
 
             // set cam 0 to master-cam and distribute its properties (shutter, gain, etc.)
             g.distributeCamProperties(0);
@@ -1781,11 +1617,6 @@ int main(int argc, char** argv)
 
         // stop cameras and clean up
         g.stopCameras();
-
-        // Stop okapi GUI
-        imgWin->setWindowState(false);
-        widWin->setWindowState(false);
-        gui.stop();
     }
     else
     {
